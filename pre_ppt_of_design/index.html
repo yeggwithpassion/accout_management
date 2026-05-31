@@ -1,0 +1,433 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>股票交易系统账户业务设计</title>
+  <link rel="stylesheet" href="node_modules/reveal.js/dist/reveal.css">
+  <link rel="stylesheet" href="node_modules/reveal.js/dist/theme/white.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="reveal">
+    <div class="slides">
+      <section>
+        <div class="slide hero-grid">
+          <div class="hero-copy">
+            <h1>股票交易系统<br>账户业务设计汇报</h1>
+            <div class="chips hero-chips">
+              <span class="chip ours">证券账户业务</span>
+              <span class="chip ours">资金账户业务</span>
+            </div>
+          </div>
+          <div class="hero-shot">
+            <img src="assets/docx_images/img33.png" alt="后台总览看板截图">
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div class="slide">
+          <div class="kicker">汇报提纲</div>
+          <h2>今天主要讲什么</h2>
+          <div class="flow">
+            <div class="flow-step">
+              <b>1. 定边界</b>
+              <span>从实验大纲拆出本组负责的证券账户和资金账户业务。</span>
+            </div>
+            <div class="flow-step">
+              <b>2. 看结构</b>
+              <span>用系统分层图和功能模块图说明设计思路。</span>
+            </div>
+            <div class="flow-step">
+              <b>3. 讲交互</b>
+              <span>从前端入口和架构语境图引出关键接口。</span>
+            </div>
+            <div class="flow-step">
+              <b>4. 落数据</b>
+              <span>用 E-R 图和物理表说明数据落点。</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div class="slide">
+          <div class="kicker">系统边界</div>
+          <h2>系统范围与本组职责</h2>
+          <div class="card-grid">
+            <div class="card highlight">
+              <strong>证券账户业务</strong>
+              <p>开户、挂失与重新开户、销户，维护投资者进入交易市场的账户通行证。</p>
+            </div>
+            <div class="card highlight">
+              <strong>资金账户业务</strong>
+              <p>开户、密码、存取款、挂失、销户、资金查询，并与证券账户关联。</p>
+            </div>
+            <div class="card">
+              <strong>交易客户端</strong>
+              <p>用户登录、查看资金与持仓、发出买卖指令。</p>
+            </div>
+            <div class="card">
+              <strong>股票中央交易系统</strong>
+              <p>保存委托、撮合交易、生成成交结果。</p>
+            </div>
+            <div class="card">
+              <strong>网上信息发布</strong>
+              <p>发布股票交易结果和查询信息。</p>
+            </div>
+            <div class="card">
+              <strong>交易系统管理</strong>
+              <p>管理员监控交易系统、审计指令和交易状态。</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div class="slide p4-flow-slide">
+          <div class="module-title">
+            <div class="kicker">总体思路</div>
+            <h2>基本设计思路与业务流程</h2>
+          </div>
+          <div class="figure full p4-flow-figure">
+            <img src="assets/docx_images/merged_3_1_flow.png" alt="3.1 基本设计概念和流程处理图">
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div class="slide module-slide">
+          <div class="module-title">
+            <div class="kicker">模块划分</div>
+            <h2>账户业务模块划分</h2>
+          </div>
+          <div class="figure full module-figure">
+            <img src="assets/docx_images/img16.png" alt="功能模块图">
+          </div>
+          <div class="module-blocks">
+            <div class="module-block">
+              <strong>证券账户管理</strong>
+              <span>开户、挂失、销户、持仓交易能力控制。</span>
+            </div>
+            <div class="module-block">
+              <strong>资金账户管理</strong>
+              <span>开户、存取款、密码、余额和年度结息。</span>
+            </div>
+            <div class="module-block">
+              <strong>账户关联管理</strong>
+              <span>证券账户与资金账户一对一绑定和状态同步。</span>
+            </div>
+            <div class="module-block">
+              <strong>支撑功能</strong>
+              <span>登录鉴权、黑名单校验和<span class="emphasis">操作日志查询</span>。</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div class="slide submodule-slide">
+          <div class="submodule-title">
+            <div class="kicker">证券账户模块</div>
+            <h2>证券账户：开户、挂失与销户</h2>
+          </div>
+          <div class="submodule-images">
+            <div class="figure">
+              <img src="assets/docx_images/img34.png" alt="证券账户业务界面">
+              <div class="caption">证券账户业务界面</div>
+            </div>
+            <div class="figure">
+              <img src="assets/docx_images/img38.png" alt="创建证券账户界面">
+              <div class="caption">创建证券账户</div>
+            </div>
+          </div>
+          <div class="module-blocks submodule-points">
+            <div class="module-block">
+              <strong>开户校验</strong>
+              <span>校验证件唯一性、投资者类型和黑名单。</span>
+            </div>
+            <div class="module-block">
+              <strong>冻结控制</strong>
+              <span>挂失或违规时冻结账户，并影响持仓交易能力。</span>
+            </div>
+            <div class="module-block">
+              <strong>补办迁移</strong>
+              <span>补办时迁移账户关系，原账户进入关闭状态。</span>
+            </div>
+            <div class="module-block">
+              <strong>销户约束</strong>
+              <span>销户前确认账户下无未清仓证券。</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div class="slide submodule-slide">
+          <div class="submodule-title">
+            <div class="kicker">资金账户模块</div>
+            <h2>资金账户：开户、存取款与结息</h2>
+          </div>
+          <div class="submodule-images">
+            <div class="figure">
+              <img src="assets/docx_images/img35.png" alt="资金账户业务界面">
+              <div class="caption">资金账户业务界面</div>
+            </div>
+            <div class="figure">
+              <img src="assets/docx_images/img37.png" alt="创建资金账户界面">
+              <div class="caption">创建资金账户</div>
+            </div>
+          </div>
+          <div class="module-blocks submodule-points">
+            <div class="module-block">
+              <strong>开户绑定</strong>
+              <span>绑定证券账户，设置交易密码和取款密码。</span>
+            </div>
+            <div class="module-block">
+              <strong>流水追溯</strong>
+              <span>存款、取款都写入资金流水。</span>
+            </div>
+            <div class="module-block">
+              <strong>余额控制</strong>
+              <span>交易场景下维护可用余额和冻结余额。</span>
+            </div>
+            <div class="module-block">
+              <strong>状态同步</strong>
+              <span>挂失、补办、销户同步账户状态和交易能力。</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div class="slide frontend-slide">
+          <div class="kicker">前端页面</div>
+          <h2>前端页面与业务入口</h2>
+          <div class="single-image-grid">
+            <div class="figure">
+              <img src="assets/docx_images/img33.png" alt="后台管理端总览">
+              <div class="caption">后台总览：账户与近期业务统计</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div class="slide deployment-text-slide">
+          <div class="module-title">
+            <div class="kicker">部署关系</div>
+            <h2>部署关系与核心对象</h2>
+          </div>
+          <div class="interface-grid deployment-card-grid">
+            <div class="interface-card">
+              <h3>客户端</h3>
+              <p>工作人员管理端办理柜台业务，投资者交易端查询资金和持仓。</p>
+            </div>
+            <div class="interface-card">
+              <h3>账户业务服务</h3>
+              <p>封装证券账户、资金账户、状态同步、资金流水和持仓更新。</p>
+            </div>
+            <div class="interface-card">
+              <h3>数据库服务</h3>
+              <p>MySQL 保存投资者、账户、流水、持仓、黑名单和操作日志。</p>
+            </div>
+            <div class="interface-card">
+              <h3>外部接口</h3>
+              <p>交易管理系统负责委托、成交、撤单结果回写与管理员风控操作。</p>
+            </div>
+          </div>
+          <div class="chips deployment-objects">
+            <span class="chip">投资者</span>
+            <span class="chip">证券账户</span>
+            <span class="chip">资金账户</span>
+            <span class="chip">持仓</span>
+            <span class="chip">资金流水</span>
+            <span class="chip">操作日志</span>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div class="slide two-col wide-left">
+          <div>
+            <div class="kicker">系统交互</div>
+            <h2>系统边界与外部交互</h2>
+            <div class="figure full">
+              <img src="assets/docx_images/img17.png" alt="架构语境图">
+            </div>
+          </div>
+          <div>
+            <ul class="focus-list">
+              <li><b>左侧</b>：管理账户界面调用开户、挂失、销户、补办等接口。</li>
+              <li><b>中间</b>：证券账户子系统与资金账户子系统通过绑定和状态同步协作。</li>
+              <li><b>右侧</b>：中央交易系统回写资金和持仓变更。</li>
+              <li><b>上方</b>：交易客户端通过登录和快照接口查询账户资产。</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div class="slide">
+          <div class="kicker">接口设计</div>
+          <h2>关键接口分组</h2>
+          <div class="interface-grid">
+            <div class="interface-card">
+              <h3>账户生命周期</h3>
+              <p><code>createSecurityAccount</code>、<code>createFundAccount</code>、挂失、补办、销户接口，支撑柜台核心业务。</p>
+            </div>
+            <div class="interface-card">
+              <h3>绑定与状态同步</h3>
+              <p><code>bindSecurityAccount</code>、<code>unbindSecurityAccount</code>、<code>syncAccountStatus</code> 保证证券账户和资金账户一致。</p>
+            </div>
+            <div class="interface-card">
+              <h3>交易联动</h3>
+              <p><code>getFundSnapshot</code>、<code>getSecuritySnapshot</code>、<code>updateFundBalance</code>、<code>updateSecurityHolding</code> 连接交易端和中央交易系统。</p>
+            </div>
+            <div class="interface-card">
+              <h3>风控、审计与批处理</h3>
+              <p><code>checkBlacklist</code>、管理员冻结/解冻、<code>queryOperationLog</code>、<code>settleAnnualInterest</code>、<code>maintainBlacklist</code> 覆盖风控、日志和年度结息。</p>
+            </div>
+          </div>
+          <div class="chips">
+            <span class="chip">统一返回：code / message / data</span>
+            <span class="chip">状态、余额、持仓、绑定关系放在同一事务里</span>
+            <span class="chip">交易更新按关联订单号做幂等控制</span>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div class="slide two-col wide-left">
+          <div>
+            <div class="kicker">异常处理</div>
+            <h2>异常处理与事务回滚</h2>
+            <div class="interface-grid">
+              <div class="interface-card">
+                <h3>业务失败</h3>
+                <p>余额不足、持仓不足、账户冻结、身份不一致等错误不进入数据库变更阶段。</p>
+              </div>
+              <div class="interface-card">
+                <h3>事务失败</h3>
+                <p>数据库写入失败或唯一键冲突时回滚事务，避免保留半完成状态。</p>
+              </div>
+              <div class="interface-card">
+                <h3>跨系统失败</h3>
+                <p>交易管理系统超时或不可用时记录请求摘要，后续按账户号、订单号或流水号补偿。</p>
+              </div>
+              <div class="interface-card">
+                <h3>安全异常</h3>
+                <p>密码连续错误、越权访问、伪造 token 和高频请求会被拒绝，并保留安全审计记录。</p>
+              </div>
+            </div>
+          </div>
+          <div>
+            <div class="db-list">
+              <span>ERR_001 余额不足</span>
+              <span>ERR_002 持仓不足</span>
+              <span>ERR_003 账户已冻结</span>
+              <span>ERR_009 权限不足</span>
+              <span>ERR_018 交易更新重复</span>
+              <span>ERR_019 结息重复或参数错误</span>
+            </div>
+            <div class="chips">
+              <span class="chip">错误响应仍使用 code / message / data</span>
+              <span class="chip">日志不明文记录密码、token 和证件号码</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div class="slide db-slide">
+          <div class="figure full db-figure">
+            <img src="assets/docx_images/img50.png" alt="总 E-R 图">
+          </div>
+          <div class="db-side">
+            <div class="db-title">
+              <div class="kicker">数据库设计</div>
+              <h2>数据库 E-R 关系</h2>
+            </div>
+            <p class="db-summary">物理表围绕 8 张核心表展开：</p>
+            <div class="db-list">
+              <span>投资者<br>investor</span>
+              <span>证券账户<br>security_account</span>
+              <span>资金账户<br>fund_account</span>
+              <span>持仓<br>holding</span>
+              <span>资金流水<br>fund_transaction_log</span>
+              <span>黑名单<br>blacklist</span>
+              <span>工作人员<br>staff</span>
+              <span>操作日志<br>operation_log</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div class="slide">
+          <div class="kicker">运行流程</div>
+          <h2>业务请求处理流程</h2>
+          <div class="flow">
+            <div class="flow-step">
+              <b>1. 提交请求</b>
+              <span>工作人员管理端或交易系统发起开户、挂失、存取款、交易更新等业务。</span>
+            </div>
+            <div class="flow-step">
+              <b>2. 三类校验</b>
+              <span>先做参数、权限和账户状态校验，失败时直接返回错误码，不修改数据库。</span>
+            </div>
+            <div class="flow-step">
+              <b>3. 事务更新</b>
+              <span>余额、冻结余额、持仓、账户状态和绑定关系放入同一事务处理。</span>
+            </div>
+            <div class="flow-step">
+              <b>4. 同步补偿</b>
+              <span>跨系统接口失败时回滚本地事务，或记录待补偿任务并按幂等键重试。</span>
+            </div>
+          </div>
+          <div class="interface-grid runtime-detail-grid">
+            <div class="interface-card">
+              <h3>账户状态</h3>
+              <p>正常、挂失冻结、违规冻结、预销户、已销户由账户状态管理统一控制，禁止重复冻结、重复销户。</p>
+            </div>
+            <div class="interface-card">
+              <h3>交易联动</h3>
+              <p>买入冻结、买入扣款、卖出回款和撤单解冻都写入资金流水，并与持仓变更保持一致。</p>
+            </div>
+            <div class="interface-card">
+              <h3>年度结息</h3>
+              <p>每年 6 月 30 日按可用余额和年利率计算利息，更新余额并生成“结息”资金流水。</p>
+            </div>
+            <div class="interface-card">
+              <h3>审计追踪</h3>
+              <p>开户、挂失、销户、修改密码、管理员查询和黑名单维护都写入操作日志。</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div class="slide thanks-slide">
+          <h1>谢谢大家</h1>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <script src="node_modules/reveal.js/dist/reveal.js"></script>
+  <script>
+    Reveal.initialize({
+      hash: true,
+      width: 1280,
+      height: 720,
+      margin: 0.04,
+      controls: true,
+      progress: true,
+      slideNumber: "c/t",
+      transition: "slide",
+      backgroundTransition: "fade"
+    });
+  </script>
+</body>
+</html>
