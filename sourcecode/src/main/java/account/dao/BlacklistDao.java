@@ -1,11 +1,13 @@
 package account.dao;
 
-import account.dao.core.JdbcExecutor;
-import account.dao.core.RowMapper;
-import account.dao.model.DomainModels.BlacklistEntry;
 import java.sql.Connection;
 import java.time.LocalDateTime;
 import java.util.List;
+
+import account.dao.core.JdbcExecutor;
+import account.dao.core.RowMapper;
+import account.dao.model.DomainModels.BlacklistEntry;
+
 
 public final class BlacklistDao extends BaseJdbcDao {
 
