@@ -8,7 +8,6 @@ import account.dao.core.JdbcExecutor;
 import account.dao.core.RowMapper;
 import account.dao.model.DomainModels.BlacklistEntry;
 
-
 public final class BlacklistDao extends BaseJdbcDao {
 
     private static final String SELECT_COLUMNS = """
