@@ -8,6 +8,7 @@ SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
 
 DROP TABLE IF EXISTS operation_log;
+DROP TABLE IF EXISTS freeze_record;
 DROP TABLE IF EXISTS holding;
 DROP TABLE IF EXISTS fund_transaction_log;
 DROP TABLE IF EXISTS fund_account;
@@ -134,6 +135,25 @@ CREATE TABLE operation_log (
     CONSTRAINT fk_operation_log_staff
         FOREIGN KEY (staff_id) REFERENCES staff (staff_id)
 ) ENGINE=InnoDB COMMENT='操作日志表';
+
+CREATE TABLE freeze_record (
+    record_id BIGINT NOT NULL AUTO_INCREMENT COMMENT '冻结记录编号',
+    account_type VARCHAR(20) NOT NULL COMMENT '账户类型',
+    account_no VARCHAR(20) NOT NULL COMMENT '账户号',
+    freeze_type VARCHAR(20) NOT NULL COMMENT '冻结类型',
+    reason VARCHAR(500) NULL COMMENT '冻结原因',
+    frozen_amount DECIMAL(15,2) NULL COMMENT '冻结金额',
+    frozen_quantity INT NULL COMMENT '冻结数量',
+    operator_id INT NULL COMMENT '操作工作人员编号',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    released_at DATETIME NULL COMMENT '解冻时间',
+    active BOOLEAN NOT NULL DEFAULT TRUE COMMENT '是否仍生效',
+    PRIMARY KEY (record_id),
+    KEY idx_freeze_account (account_type, account_no),
+    KEY idx_freeze_active (active),
+    CONSTRAINT fk_freeze_record_staff
+        FOREIGN KEY (operator_id) REFERENCES staff (staff_id)
+) ENGINE=InnoDB COMMENT='冻结记录表';
 
 ALTER TABLE security_account
     ADD CONSTRAINT fk_security_account_linked_fund

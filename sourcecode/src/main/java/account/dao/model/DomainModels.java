@@ -78,6 +78,7 @@ public final class DomainModels {
             String username,
             String passwordHash,
             Integer permissionLevel,
+            String status,
             LocalDateTime createdAt
     ) {
     }
@@ -119,17 +120,6 @@ public final class DomainModels {
             LocalDateTime createdAt,
             LocalDateTime releasedAt,
             boolean active
-    ) {
-    }
-
-    public record BlacklistEntry(
-            Long blacklistId,
-            String certificateNo,
-            String reason,
-            Integer createdBy,
-            boolean active,
-            LocalDateTime createdAt,
-            LocalDateTime updatedAt
     ) {
     }
 

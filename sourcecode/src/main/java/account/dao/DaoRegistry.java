@@ -1,5 +1,7 @@
 package account.dao;
 
+import account.blacklist.AccountBlacklistSupport;
+import account.blacklist.BlacklistClient;
 import account.dao.core.ConnectionProvider;
 import account.dao.core.DriverManagerConnectionProvider;
 import account.dao.core.JdbcExecutor;
@@ -18,7 +20,6 @@ public final class DaoRegistry {
     private final OperationLogDao operationLogDao;
     private final StaffDao staffDao;
     private final FreezeRecordDao freezeRecordDao;
-    private final BlacklistDao blacklistDao;
 
     public DaoRegistry(ConnectionProvider connectionProvider) {
         Objects.requireNonNull(connectionProvider, "connectionProvider");
@@ -32,7 +33,6 @@ public final class DaoRegistry {
         this.operationLogDao = new OperationLogDao(executor);
         this.staffDao = new StaffDao(executor);
         this.freezeRecordDao = new FreezeRecordDao(executor);
-        this.blacklistDao = new BlacklistDao(executor);
     }
 
     public static DaoRegistry forDriverManager(String url, String username, String password) {
@@ -75,7 +75,7 @@ public final class DaoRegistry {
         return freezeRecordDao;
     }
 
-    public BlacklistDao blacklistDao() {
-        return blacklistDao;
+    public AccountBlacklistSupport blacklistSupport(BlacklistClient blacklistClient) {
+        return new AccountBlacklistSupport(blacklistClient, investorDao, securityAccountDao, fundAccountDao);
     }
 }
