@@ -6,7 +6,7 @@
 
 - 基于 `JDBC` 实现设计报告中相关数据表的增查改操作
 - 提供可复用的事务控制、SQL 执行与结果映射工具
-- 提供投资者、证券账户、资金账户、持仓、资金流水、操作日志、工作人员、冻结记录等 `DAO` 类
+- 提供投资者、证券账户、资金账户、持仓、资金流水、操作日志、工作人员等 `DAO` 类
 - 提供对外黑名单接口的账户侧桥接能力，可按姓名、证券账户号、资金账户号做黑名单校验
 - 统一使用 `PreparedStatement`，避免直接拼接 SQL 带来的注入风险
 
@@ -29,16 +29,11 @@
 - `staff`
 - `operation_log`
 
-## 关于 `freeze_record` 与 `blacklist` 的边界
+## 关于 `blacklist` 的边界
 
-设计报告中多次提到了 `freeze_record` 和 `blacklist`，但当前项目数据库只落库 `freeze_record`，不维护本地 `blacklist` 表：
+设计报告中多次提到了 `blacklist`，但当前项目数据库不维护本地 `blacklist` 表：
 
-- `freeze_record`：`record_id`、`account_type`、`account_no`、`freeze_type`、`reason`、`frozen_amount`、`frozen_quantity`、`operator_id`、`created_at`、`released_at`、`active`
 - `blacklist`：通过外部黑名单接口完成校验，不属于当前 DAO 模块的本地数据库对象
-
-如果后续数据库组调整 `freeze_record` 字段名，只需要小范围调整：
-
-- `FreezeRecordDao`
 
 如果后续确实要把黑名单做成本地表，再单独补充 `BlacklistDao` 和对应脚本即可。
 

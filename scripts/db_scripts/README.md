@@ -14,7 +14,7 @@
 本脚本基于当前版本数据库边界编写：
 
 - 不维护黑名单表
-- 维护冻结记录表
+- 不维护冻结记录表
 - 不做角色体系
 - 不记录 IP 地址
 - 冻结判断先看账户 `status`
@@ -33,7 +33,6 @@
 - `staff`：工作人员
 - `holding`：持仓
 - `operation_log`：操作日志
-- `freeze_record`：冻结记录
 
 ### 视图
 
@@ -262,8 +261,9 @@ SELECT @code, @message, @quantity, @frozen_quantity, @avg_cost;
 ## 当前版本暂不包含的数据库对象
 
 - `blacklist`
+- `freeze_record`
 - 角色权限表
 - 委托单表
 - 股票基础信息表
 
-`blacklist` 不属于当前数据库脚本范围，应通过外部风控接口或上层服务处理；`freeze_record` 已纳入当前脚本并与 DAO 字段保持一致。
+`blacklist` 不属于当前数据库脚本范围，应通过外部风控接口或上层服务处理；冻结历史应通过 `operation_log.detail` 留痕，当前数据库不维护独立 `freeze_record` 表。

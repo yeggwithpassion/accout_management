@@ -2,11 +2,8 @@ package account.dao;
 
 import account.dao.core.DaoException;
 import account.dao.model.DomainEnums.AccountStatus;
-import account.dao.model.DomainEnums.AccountType;
-import account.dao.model.DomainEnums.FreezeType;
 import account.dao.model.DomainEnums.FundTransactionType;
 import account.dao.model.DomainEnums.InvestorType;
-import account.dao.model.DomainModels.FreezeRecord;
 import account.dao.model.DomainModels.FundAccount;
 import account.dao.model.DomainModels.FundTransactionLog;
 import account.dao.model.DomainModels.Holding;
@@ -171,56 +168,15 @@ class DaoIntegrationTest {
     }
 
     @Test
-    void freezeRecordDaoMatchesDatabaseSchema() {
-        seedInvestorSecurityAndFund("SA2026000004", "FA2026000004");
-
-        registry.transactionManager().execute(connection -> {
-            registry.freezeRecordDao().create(connection, new FreezeRecord(
-                    null,
-                    AccountType.FUND,
-                    "FA2026000004",
-                    FreezeType.BUY_ORDER,
-                    "buy order freeze",
-                    new BigDecimal("100.00"),
-                    null,
-                    1,
-                    null,
-                    null,
-                    true
-            ));
-            return null;
-        });
-
-        assertAll(
-                () -> assertEquals(1, registry.freezeRecordDao().findActiveRecords(AccountType.FUND, "FA2026000004").size())
-        );
-
-        registry.transactionManager().execute(connection -> {
-            assertTrue(registry.freezeRecordDao().closeActiveRecord(
-                    connection,
-                    AccountType.FUND,
-                    "FA2026000004",
-                    FreezeType.BUY_ORDER,
-                    LocalDateTime.of(2026, 6, 15, 12, 0)
-            ));
-            return null;
-        });
-
-        assertAll(
-                () -> assertTrue(registry.freezeRecordDao().findActiveRecords(AccountType.FUND, "FA2026000004").isEmpty())
-        );
-    }
-
-    @Test
     void databaseScriptsContainDaoSupportedObjects() throws Exception {
         String createTables = Files.readString(Path.of("..", "scripts", "db_scripts", "01_create_tables.sql"), StandardCharsets.UTF_8);
         String testData = Files.readString(Path.of("..", "scripts", "db_scripts", "03_test_data.sql"), StandardCharsets.UTF_8);
 
         assertAll(
-                () -> assertTrue(createTables.contains("CREATE TABLE freeze_record")),
+                () -> assertFalse(createTables.contains("CREATE TABLE freeze_record")),
                 () -> assertFalse(createTables.contains("CREATE TABLE blacklist")),
                 () -> assertTrue(createTables.contains("status ENUM('正常', '禁用')")),
-                () -> assertTrue(testData.contains("INSERT INTO freeze_record")),
+                () -> assertFalse(testData.contains("INSERT INTO freeze_record")),
                 () -> assertFalse(testData.contains("INSERT INTO blacklist"))
         );
     }
@@ -390,22 +346,6 @@ class DaoIntegrationTest {
                     detail varchar(500),
                     operation_time timestamp default current_timestamp not null,
                     foreign key (staff_id) references staff(staff_id)
-                )
-                """,
-                """
-                create table freeze_record (
-                    record_id bigint auto_increment primary key,
-                    account_type varchar(20) not null,
-                    account_no varchar(20) not null,
-                    freeze_type varchar(20) not null,
-                    reason varchar(500),
-                    frozen_amount decimal(15,2),
-                    frozen_quantity int,
-                    operator_id int,
-                    created_at timestamp default current_timestamp not null,
-                    released_at timestamp,
-                    active boolean not null default true,
-                    foreign key (operator_id) references staff(staff_id)
                 )
                 """
         );

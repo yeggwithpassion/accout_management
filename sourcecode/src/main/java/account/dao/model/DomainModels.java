@@ -1,8 +1,6 @@
 package account.dao.model;
 
 import account.dao.model.DomainEnums.AccountStatus;
-import account.dao.model.DomainEnums.AccountType;
-import account.dao.model.DomainEnums.FreezeType;
 import account.dao.model.DomainEnums.FundTransactionType;
 import account.dao.model.DomainEnums.InvestorType;
 import java.math.BigDecimal;
@@ -105,21 +103,6 @@ public final class DomainModels {
             String targetId,
             String detail,
             LocalDateTime operationTime
-    ) {
-    }
-
-    public record FreezeRecord(
-            Long recordId,
-            AccountType accountType,
-            String accountNo,
-            FreezeType freezeType,
-            String reason,
-            BigDecimal frozenAmount,
-            Integer frozenQuantity,
-            Integer operatorId,
-            LocalDateTime createdAt,
-            LocalDateTime releasedAt,
-            boolean active
     ) {
     }
 

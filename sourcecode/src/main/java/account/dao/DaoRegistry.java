@@ -19,7 +19,6 @@ public final class DaoRegistry {
     private final HoldingDao holdingDao;
     private final OperationLogDao operationLogDao;
     private final StaffDao staffDao;
-    private final FreezeRecordDao freezeRecordDao;
 
     public DaoRegistry(ConnectionProvider connectionProvider) {
         Objects.requireNonNull(connectionProvider, "connectionProvider");
@@ -32,7 +31,6 @@ public final class DaoRegistry {
         this.holdingDao = new HoldingDao(executor);
         this.operationLogDao = new OperationLogDao(executor);
         this.staffDao = new StaffDao(executor);
-        this.freezeRecordDao = new FreezeRecordDao(executor);
     }
 
     public static DaoRegistry forDriverManager(String url, String username, String password) {
@@ -69,10 +67,6 @@ public final class DaoRegistry {
 
     public StaffDao staffDao() {
         return staffDao;
-    }
-
-    public FreezeRecordDao freezeRecordDao() {
-        return freezeRecordDao;
     }
 
     public AccountBlacklistSupport blacklistSupport(BlacklistClient blacklistClient) {

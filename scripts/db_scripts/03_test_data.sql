@@ -4,7 +4,6 @@ SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
 
 DELETE FROM operation_log;
-DELETE FROM freeze_record;
 DELETE FROM holding;
 DELETE FROM fund_transaction_log;
 DELETE FROM fund_account;
@@ -79,10 +78,3 @@ INSERT INTO operation_log (
     (2, 1, '资金账户开户', 'fund_account', 'FA2026000001', '为SA2026000001开设并绑定资金账户', '2026-06-01 09:05:00'),
     (3, 2, '存款', 'fund_account', 'FA2026000002', '柜台存款56000.00', '2026-06-02 11:00:00'),
     (4, 1, '证券账户开户', 'security_account', 'SA2026000003', '为杭州星河科技有限公司开设证券账户', '2026-06-03 08:50:00');
-
-INSERT INTO freeze_record (
-    record_id, account_type, account_no, freeze_type, reason,
-    frozen_amount, frozen_quantity, operator_id, active
-) VALUES
-    (1, 'FUND', 'FA2026000001', 'BUY_ORDER', '买入委托冻结资金', 5000.00, NULL, 1, TRUE),
-    (2, 'SECURITY', 'SA2026000001', 'SELL_ORDER', '卖出委托冻结持仓', NULL, 50, 1, TRUE);
