@@ -373,6 +373,24 @@ public class AdminServiceImpl implements AdminService {
                 throw new BusinessException(ErrorCode.ERR_011, "账户已销户");
             }
 
+            // 检查关联资金账户余额
+            if (account.linkedFundAcc() != null && !account.linkedFundAcc().isBlank()) {
+                var fundAccount = dao.fundAccountDao().findByAccountNo(account.linkedFundAcc());
+                if (fundAccount.isPresent()) {
+                    var fa = fundAccount.get();
+                    if (fa.availableBalance().compareTo(BigDecimal.ZERO) > 0
+                            || fa.frozenBalance().compareTo(BigDecimal.ZERO) > 0) {
+                        throw new BusinessException(ErrorCode.ERR_007,
+                                "关联资金账户尚有余额或冻结资金，请先清空资金账户");
+                    }
+                    if (fa.status() == DomainEnums.AccountStatus.LOSS_FROZEN
+                            || fa.status() == DomainEnums.AccountStatus.VIOLATION_FROZEN) {
+                        throw new BusinessException(ErrorCode.ERR_017,
+                                "关联资金账户处于冻结状态，请先解冻资金账户");
+                    }
+                }
+            }
+
             // 强制销户
             dao.securityAccountDao().updateStatus(connection, secAccNo, DomainEnums.AccountStatus.CLOSED);
 

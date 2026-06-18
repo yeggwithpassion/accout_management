@@ -252,7 +252,7 @@ public class FundAccountServiceImpl implements FundAccountService {
                     .orElseThrow(() -> new BusinessException(ErrorCode.ERR_010, "资金账户不存在: " + fundAccNo));
 
             // 验证身份
-            verifyOwnership(connection, account.secAccNo(), idNumber);
+            verifyOwnership(account.secAccNo(), idNumber);
 
             // 检查状态
             if (account.status() == DomainEnums.AccountStatus.LOSS_FROZEN) {
@@ -297,7 +297,7 @@ public class FundAccountServiceImpl implements FundAccountService {
                     .orElseThrow(() -> new BusinessException(ErrorCode.ERR_010, "资金账户不存在: " + oldFundAccNo));
 
             // 验证身份
-            verifyOwnership(connection, oldAccount.secAccNo(), idNumber);
+            verifyOwnership(oldAccount.secAccNo(), idNumber);
 
             // 检查旧账户必须处于挂失冻结状态
             if (oldAccount.status() != DomainEnums.AccountStatus.LOSS_FROZEN) {
@@ -353,7 +353,7 @@ public class FundAccountServiceImpl implements FundAccountService {
                     .orElseThrow(() -> new BusinessException(ErrorCode.ERR_010, "资金账户不存在: " + fundAccNo));
 
             // 验证身份
-            verifyOwnership(connection, account.secAccNo(), idNumber);
+            verifyOwnership(account.secAccNo(), idNumber);
 
             // 检查账户状态
             if (account.status() == DomainEnums.AccountStatus.CLOSED) {
@@ -553,24 +553,24 @@ public class FundAccountServiceImpl implements FundAccountService {
         String txnType = request.getTxnType();
         BigDecimal amount = request.getAmount();
 
-        // 幂等检查
         DomainEnums.FundTransactionType daoType = mapTxnType(txnType);
-        if (dao.fundTransactionLogDao().existsByRefOrderIdAndTxnType(refOrderId, daoType)) {
-            log.info("[updateFundBalance] 幂等: ref_order_id={} txn_type={} 已处理，跳过", refOrderId, txnType);
-            var account = dao.fundAccountDao().findByAccountNo(fundAccNo)
-                    .orElseThrow(() -> new BusinessException(ErrorCode.ERR_010, "资金账户不存在"));
-            Map<String, Object> result = new LinkedHashMap<>();
-            result.put("available_balance", account.availableBalance());
-            result.put("frozen_balance", account.frozenBalance());
-            result.put("duplicate", true);
-            return result;
-        }
 
         return dao.transactionManager().execute(connection -> {
+            // 1. 锁定资金账户行（排他锁，序列化并发请求）
             var account = dao.fundAccountDao().findByAccountNoForUpdate(connection, fundAccNo)
                     .orElseThrow(() -> new BusinessException(ErrorCode.ERR_010, "资金账户不存在: " + fundAccNo));
 
-            // 检查状态
+            // 2. 幂等检查（在 FOR UPDATE 锁持有期间执行，消除 TOCTOU 竞态）
+            if (dao.fundTransactionLogDao().existsByRefOrderIdAndTxnType(refOrderId, daoType)) {
+                log.info("[updateFundBalance] 幂等: ref_order_id={} txn_type={} 已处理，跳过", refOrderId, txnType);
+                Map<String, Object> result = new LinkedHashMap<>();
+                result.put("available_balance", account.availableBalance());
+                result.put("frozen_balance", account.frozenBalance());
+                result.put("duplicate", true);
+                return result;
+            }
+
+            // 3. 检查状态
             checkAccountNotFrozenOrClosed(account.status(), fundAccNo);
 
             BigDecimal newAvailable = account.availableBalance();
@@ -622,6 +622,99 @@ public class FundAccountServiceImpl implements FundAccountService {
         });
     }
 
+    // ==================== bind / unbind 外部接口 ====================
+
+    @Override
+    public Map<String, Object> bindSecurityAccount(String fundAccNo, String secAccNo) {
+        return dao.transactionManager().execute(connection -> {
+            // 1. 检查证券账户存在
+            var secAccount = dao.securityAccountDao().findByAccountNoForUpdate(connection, secAccNo)
+                    .orElseThrow(() -> new BusinessException(ErrorCode.ERR_005, "证券账户不存在: " + secAccNo));
+
+            // 2. 检查证券账户未关联其他资金账户 (ERR_006/ERR_014)
+            if (secAccount.linkedFundAcc() != null && !secAccount.linkedFundAcc().isBlank()) {
+                if (secAccount.linkedFundAcc().equals(fundAccNo)) {
+                    throw new BusinessException(ErrorCode.ERR_011, "证券账户已绑定该资金账户");
+                }
+                throw new BusinessException(ErrorCode.ERR_014, "证券账户已绑定其他资金账户: " + secAccount.linkedFundAcc());
+            }
+
+            // 3. 检查资金账户存在且未绑定其他证券账户
+            var fundAccount = dao.fundAccountDao().findByAccountNoForUpdate(connection, fundAccNo)
+                    .orElseThrow(() -> new BusinessException(ErrorCode.ERR_010, "资金账户不存在: " + fundAccNo));
+
+            if (fundAccount.secAccNo() != null && !fundAccount.secAccNo().isBlank()) {
+                if (!fundAccount.secAccNo().equals(secAccNo)) {
+                    throw new BusinessException(ErrorCode.ERR_014, "该资金账户已绑定其他证券账户: " + fundAccount.secAccNo());
+                }
+            }
+
+            // 4. 验证投资者身份一致性 (ERR_013)
+            var investor = dao.investorDao().findById(secAccount.investorId())
+                    .orElseThrow(() -> new BusinessException(ErrorCode.ERR_013, "投资者不存在"));
+
+            // 5. 检查资金账户状态
+            checkAccountNotFrozenOrClosed(fundAccount.status(), fundAccNo);
+
+            // 6. 双向绑定
+            dao.securityAccountDao().bindFundAccount(connection, secAccNo, fundAccNo);
+            dao.fundAccountDao().relinkSecurityAccount(connection, fundAccNo, secAccNo);
+
+            log.info("[bindSecurityAccount] fund_acc_no={} sec_acc_no={}", fundAccNo, secAccNo);
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("fund_acc_no", fundAccNo);
+            result.put("sec_acc_no", secAccNo);
+            result.put("status", "bound");
+            return result;
+        });
+    }
+
+    @Override
+    public Map<String, Object> unbindSecurityAccount(String fundAccNo, String secAccNo) {
+        return dao.transactionManager().execute(connection -> {
+            // 1. 检查资金账户存在
+            var fundAccount = dao.fundAccountDao().findByAccountNoForUpdate(connection, fundAccNo)
+                    .orElseThrow(() -> new BusinessException(ErrorCode.ERR_010, "资金账户不存在: " + fundAccNo));
+
+            // 2. 检查资金账户是否绑定该证券账户 (ERR_015)
+            if (fundAccount.secAccNo() == null || fundAccount.secAccNo().isBlank()) {
+                throw new BusinessException(ErrorCode.ERR_015, "该资金账户未绑定任何证券账户");
+            }
+            if (!fundAccount.secAccNo().equals(secAccNo)) {
+                throw new BusinessException(ErrorCode.ERR_015, "资金账户绑定的证券账户不匹配");
+            }
+
+            // 3. 检查证券账户存在
+            var secAccount = dao.securityAccountDao().findByAccountNoForUpdate(connection, secAccNo)
+                    .orElseThrow(() -> new BusinessException(ErrorCode.ERR_005, "证券账户不存在: " + secAccNo));
+
+            // 4. 检查余额 (ERR_007)
+            if (fundAccount.availableBalance().compareTo(BigDecimal.ZERO) > 0) {
+                throw new BusinessException(ErrorCode.ERR_007, "资金账户尚有可用余额，无法解绑");
+            }
+            if (fundAccount.frozenBalance().compareTo(BigDecimal.ZERO) > 0) {
+                throw new BusinessException(ErrorCode.ERR_007, "资金账户尚有冻结资金，无法解绑");
+            }
+
+            // 5. 检查冻结状态 (ERR_017)
+            if (fundAccount.status() == DomainEnums.AccountStatus.LOSS_FROZEN
+                    || fundAccount.status() == DomainEnums.AccountStatus.VIOLATION_FROZEN) {
+                throw new BusinessException(ErrorCode.ERR_017, "资金账户处于冻结状态，无法解绑");
+            }
+
+            // 6. 双向解绑
+            dao.securityAccountDao().unbindFundAccount(connection, secAccNo);
+            dao.fundAccountDao().relinkSecurityAccount(connection, fundAccNo, null);
+
+            log.info("[unbindSecurityAccount] fund_acc_no={} sec_acc_no={}", fundAccNo, secAccNo);
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("fund_acc_no", fundAccNo);
+            result.put("sec_acc_no", secAccNo);
+            result.put("status", "unbound");
+            return result;
+        });
+    }
+
     // ==================== 辅助方法 ====================
 
     /**
@@ -643,7 +736,7 @@ public class FundAccountServiceImpl implements FundAccountService {
     /**
      * 通过证券账户链验证身份证号。
      */
-    private void verifyOwnership(java.sql.Connection connection, String secAccNo, String idNumber) {
+    private void verifyOwnership(String secAccNo, String idNumber) {
         if (secAccNo == null || secAccNo.isBlank()) {
             throw new BusinessException(ErrorCode.ERR_015, "资金账户未绑定任何证券账户");
         }

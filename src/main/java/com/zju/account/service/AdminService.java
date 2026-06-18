@@ -11,11 +11,11 @@ public interface AdminService {
         throw new UnsupportedOperationException("settleAnnualInterest not implemented yet");
     }
 
-    default Object adminFreezeAccount(AdminFreezeRequest request) {
+    default void adminFreezeAccount(AdminFreezeRequest request) {
         throw new UnsupportedOperationException("adminFreezeAccount not implemented yet");
     }
 
-    default Object adminUnfreezeAccount(AdminFreezeRequest request) {
+    default void adminUnfreezeAccount(AdminFreezeRequest request) {
         throw new UnsupportedOperationException("adminUnfreezeAccount not implemented yet");
     }
 
@@ -23,7 +23,7 @@ public interface AdminService {
         throw new UnsupportedOperationException("adminGetAccountDetails not implemented yet");
     }
 
-    default Object adminCloseSecurityAccount(AdminCloseSecurityAccountRequest request) {
+    default void adminCloseSecurityAccount(AdminCloseSecurityAccountRequest request) {
         throw new UnsupportedOperationException("adminCloseSecurityAccount not implemented yet");
     }
 }

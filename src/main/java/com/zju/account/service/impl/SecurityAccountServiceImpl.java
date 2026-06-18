@@ -347,6 +347,12 @@ public class SecurityAccountServiceImpl implements SecurityAccountService {
                     || daoStatus == DomainEnums.AccountStatus.VIOLATION_FROZEN) {
                 throw new BusinessException(ErrorCode.ERR_003, "账户已冻结");
             }
+            if (daoStatus == DomainEnums.AccountStatus.CLOSED) {
+                throw new BusinessException(ErrorCode.ERR_010, "账户已销户，无法变更持仓");
+            }
+            if (daoStatus == DomainEnums.AccountStatus.PRE_CLOSE) {
+                throw new BusinessException(ErrorCode.ERR_010, "账户已预销户，无法变更持仓");
+            }
 
             // 查找或初始化持仓
             var existingHolding = dao.holdingDao().findByAccountAndStockForUpdate(connection, secAccNo, stockCode);
