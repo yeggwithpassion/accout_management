@@ -10,4 +10,6 @@ public interface StaffService {
     StaffLoginResponse staffLogin(StaffLoginRequest request);
 
     StaffStatusResponse deactivateStaff(DeactivateStaffRequest request);
+
+    void changePassword(ChangeStaffPasswordRequest request);
 }

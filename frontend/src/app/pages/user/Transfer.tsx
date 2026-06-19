@@ -48,16 +48,42 @@ export default function Transfer() {
       return;
     }
 
+    // 证转银时检查余额
+    if (direction === "securities_to_bank") {
+      const availableBalance = account?.availableBalance || account?.balance || 0;
+      if (numAmount > availableBalance) {
+        showMessage("转出金额不能超过可用余额", "error");
+        return;
+      }
+    }
+
     setSubmitting(true);
     try {
-      const result = await api.bankTransfer(direction, numAmount, withdrawPassword);
-      showMessage(
-        `转账成功！${direction === "bank_to_securities" ? "转入" : "转出"} ${numAmount.toLocaleString()} 元，当前余额: ${result.newBalance.toLocaleString()} 元`,
-        "success"
-      );
-      setAmount("");
-      setWithdrawPassword("");
-      loadAccount();
+      // 银转证调用存款API，证转银调用取款API
+      let result;
+      if (direction === "bank_to_securities") {
+        // 银转证 - 需要资金账号和身份证号
+        const fundAccNo = localStorage.getItem('fund_acc_no') || '';
+        result = await api.deposit(fundAccNo, numAmount, '');
+      } else {
+        // 证转银 - 需要资金账号、金额、身份证号、取款密码
+        const fundAccNo = localStorage.getItem('fund_acc_no') || '';
+        const idNumber = localStorage.getItem('id_number') || '';
+        result = await api.withdraw(fundAccNo, numAmount, idNumber, withdrawPassword);
+      }
+      
+      if (result.code === 0) {
+        const balanceAfter = result.available_balance || result.data?.available_balance || 0;
+        showMessage(
+          `转账成功！${direction === "bank_to_securities" ? "转入" : "转出"} ${numAmount.toLocaleString()} 元`,
+          "success"
+        );
+        setAmount("");
+        setWithdrawPassword("");
+        loadAccount();
+      } else {
+        showMessage(result.message || "转账失败", "error");
+      }
     } catch (err: any) {
       showMessage(err.message || "转账失败", "error");
     } finally {
@@ -111,13 +137,13 @@ export default function Transfer() {
               <div className="flex justify-between py-2 border-b">
                 <span className="text-slate-500">可用资金</span>
                 <span className="font-mono font-semibold text-red-600">
-                  {(account?.balance || 0).toLocaleString("zh-CN", { minimumFractionDigits: 2 })}
+                  {(account?.availableBalance || account?.balance || 0).toLocaleString("zh-CN", { minimumFractionDigits: 2 })}
                 </span>
               </div>
               <div className="flex justify-between py-2">
                 <span className="text-slate-500">冻结资金</span>
                 <span className="font-mono text-slate-500">
-                  {(account?.frozenAmount || 0).toLocaleString("zh-CN", { minimumFractionDigits: 2 })}
+                  {(account?.frozenBalance || account?.frozenAmount || 0).toLocaleString("zh-CN", { minimumFractionDigits: 2 })}
                 </span>
               </div>
             </div>
@@ -164,7 +190,7 @@ export default function Transfer() {
                 />
                 {direction === "securities_to_bank" && account && (
                   <p className="text-xs text-slate-400 mt-1">
-                    最大可转出: {account.balance.toLocaleString("zh-CN", { minimumFractionDigits: 2 })} 元
+                    最大可转出: {(account.availableBalance || account.balance || 0).toLocaleString("zh-CN", { minimumFractionDigits: 2 })} 元
                   </p>
                 )}
               </div>

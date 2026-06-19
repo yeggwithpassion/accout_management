@@ -21,6 +21,7 @@ import FundAccounts from "./pages/FundAccounts";
 import { UserLayout } from "./components/UserLayout";
 import UserDashboard from "./pages/user/UserDashboard";
 import Transfer from "./pages/user/Transfer";
+import ChangePassword from "./pages/user/ChangePassword";
 
 export const router = createBrowserRouter([
   {
@@ -45,6 +46,7 @@ export const router = createBrowserRouter([
     children: [
       { index: true, Component: UserDashboard },
       { path: "transfer", Component: Transfer },
+      { path: "password", Component: ChangePassword },
     ],
   }
 ]);

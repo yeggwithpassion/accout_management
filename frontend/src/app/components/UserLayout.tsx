@@ -6,14 +6,24 @@ import {
   LogOut,
   Menu,
   Bell,
-  Briefcase
+  Briefcase,
+  Key
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { api } from "../lib/api";
 
 export function UserLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [userInfo, setUserInfo] = useState({ fundAccNo: '', secAccNo: '', name: '用户' });
   const navigate = useNavigate();
+
+  useEffect(() => {
+    // 从localStorage获取用户信息
+    const fundAccNo = localStorage.getItem('fund_acc_no') || '';
+    const secAccNo = localStorage.getItem('sec_acc_no') || '';
+    // 尝试从资金账号提取姓名（实际应该从登录响应中获取）
+    setUserInfo({ fundAccNo, secAccNo, name: '用户' });
+  }, []);
 
   const handleLogout = () => {
     api.clearToken();
@@ -23,6 +33,7 @@ export function UserLayout() {
   const navigation = [
     { name: '我的账户', href: '/user', icon: LayoutDashboard, end: true },
     { name: '银证转账', href: '/user/transfer', icon: Wallet },
+    { name: '修改密码', href: '/user/password', icon: Key },
   ];
 
   return (
@@ -101,10 +112,15 @@ export function UserLayout() {
               <Bell className="w-5 h-5" />
               <span className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
             </button>
+            <NavLink to="/user/password" className="flex items-center gap-2 text-slate-500 hover:text-red-600 transition-colors">
+              <Key className="w-5 h-5" />
+            </NavLink>
             <div className="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center text-red-700 font-bold">
-              张
+              {userInfo.name.charAt(0)}
             </div>
-            <div className="text-sm font-medium text-slate-700 hidden sm:block">张三 (A10023491)</div>
+            <div className="text-sm font-medium text-slate-700 hidden sm:block">
+              {userInfo.fundAccNo ? `${userInfo.name} (${userInfo.fundAccNo})` : userInfo.name}
+            </div>
           </div>
         </header>
         

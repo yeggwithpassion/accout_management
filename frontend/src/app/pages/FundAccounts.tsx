@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Plus, Search, DollarSign, RefreshCw, XCircle, Link as LinkIcon, ShieldAlert } from "lucide-react";
+import { Plus, Search, DollarSign, RefreshCw, XCircle, Link as LinkIcon, ShieldAlert, Key } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
@@ -42,6 +42,11 @@ export default function FundAccounts() {
   const [actionModalOpen, setActionModalOpen] = useState(false);
   const [actionType, setActionType] = useState<'loss' | 'reissue' | 'close' | null>(null);
   const [actionReason, setActionReason] = useState("");
+  
+  // 修改密码相关状态
+  const [isChangePwdModalOpen, setIsChangePwdModalOpen] = useState(false);
+  const [pwdType, setPwdType] = useState<'trade' | 'withdraw'>('trade');
+  const [newPassword, setNewPassword] = useState("");
 
   // 获取账户列表
   const fetchAccounts = async () => {
@@ -291,6 +296,47 @@ export default function FundAccounts() {
 
   const totalBalance = accounts.reduce((sum, acc) => sum + (acc.available_balance || 0), 0);
 
+  // 打开修改密码对话框
+  const openChangePwdModal = (account: FundAccount) => {
+    setSelectedAccount(account);
+    setPwdType('trade');
+    setNewPassword("");
+    setActionError("");
+    setIsChangePwdModalOpen(true);
+  };
+
+  // 执行修改密码
+  const handleChangePassword = async () => {
+    if (!selectedAccount || !newPassword) return;
+    
+    if (newPassword.length !== 6) {
+      setActionError("密码必须为6位数字");
+      return;
+    }
+    
+    setActionLoading(true);
+    setActionError("");
+    
+    try {
+      const result = await api.adminChangeFundPassword(
+        selectedAccount.fund_acc_no,
+        newPassword,
+        pwdType,
+        selectedAccount.id_number
+      );
+      if (result.code === 0) {
+        setIsChangePwdModalOpen(false);
+        alert(`${pwdType === 'trade' ? '交易' : '取款'}密码修改成功！`);
+      } else {
+        setActionError(result.message || "密码修改失败");
+      }
+    } catch (error: any) {
+      setActionError(error.message || "密码修改失败，请检查网络连接");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -505,6 +551,17 @@ export default function FundAccounts() {
                           <span className="sr-only">销户</span>
                         </Button>
                       )}
+                      {account.status !== 'closed' && (
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-8 w-8 text-slate-500 hover:text-blue-600"
+                          onClick={() => openChangePwdModal(account)}
+                        >
+                          <Key className="h-4 w-4" />
+                          <span className="sr-only">改密</span>
+                        </Button>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>
@@ -599,6 +656,66 @@ export default function FundAccounts() {
               disabled={actionLoading}
             >
               {actionLoading ? '处理中...' : '确认取款'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 修改密码对话框 */}
+      <Dialog open={isChangePwdModalOpen} onOpenChange={setIsChangePwdModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>修改资金账户密码</DialogTitle>
+            <DialogDescription>
+              为账户 {selectedAccount?.fund_acc_no}（户名：{selectedAccount?.name}）修改密码。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div className="space-y-2">
+              <Label>密码类型</Label>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant={pwdType === 'trade' ? 'default' : 'outline'}
+                  onClick={() => setPwdType('trade')}
+                  className={pwdType === 'trade' ? 'bg-red-600' : ''}
+                >
+                  交易密码
+                </Button>
+                <Button
+                  type="button"
+                  variant={pwdType === 'withdraw' ? 'default' : 'outline'}
+                  onClick={() => setPwdType('withdraw')}
+                  className={pwdType === 'withdraw' ? 'bg-red-600' : ''}
+                >
+                  取款密码
+                </Button>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>新密码（6位数字）</Label>
+              <Input
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="请输入6位新密码"
+                maxLength={6}
+              />
+            </div>
+            {actionError && (
+              <div className="text-sm text-red-600 bg-red-50 p-2 rounded">
+                {actionError}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsChangePwdModalOpen(false)}>取消</Button>
+            <Button 
+              className="bg-blue-600 hover:bg-blue-700"
+              onClick={handleChangePassword}
+              disabled={actionLoading}
+            >
+              {actionLoading ? '处理中...' : '确认修改'}
             </Button>
           </DialogFooter>
         </DialogContent>

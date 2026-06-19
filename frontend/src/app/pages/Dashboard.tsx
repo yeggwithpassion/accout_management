@@ -168,28 +168,8 @@ export default function Dashboard() {
         ))}
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
-        <Card className="col-span-4">
-          <CardHeader>
-            <CardTitle>近期开户趋势</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="h-[300px] w-full flex items-end gap-2 text-slate-500 text-xs">
-               <div className="flex-1 bg-red-100 rounded-t flex items-end"><div className="w-full bg-red-500 rounded-t" style={{height: "60%"}}></div></div>
-               <div className="flex-1 bg-red-100 rounded-t flex items-end"><div className="w-full bg-red-500 rounded-t" style={{height: "80%"}}></div></div>
-               <div className="flex-1 bg-red-100 rounded-t flex items-end"><div className="w-full bg-red-500 rounded-t" style={{height: "40%"}}></div></div>
-               <div className="flex-1 bg-red-100 rounded-t flex items-end"><div className="w-full bg-red-500 rounded-t" style={{height: "90%"}}></div></div>
-               <div className="flex-1 bg-red-100 rounded-t flex items-end"><div className="w-full bg-red-500 rounded-t" style={{height: "50%"}}></div></div>
-               <div className="flex-1 bg-red-100 rounded-t flex items-end"><div className="w-full bg-red-500 rounded-t" style={{height: "70%"}}></div></div>
-               <div className="flex-1 bg-red-100 rounded-t flex items-end"><div className="w-full bg-red-500 rounded-t" style={{height: "100%"}}></div></div>
-            </div>
-            <div className="flex justify-between mt-2 text-xs text-slate-500">
-              <span>周一</span><span>周二</span><span>周三</span><span>周四</span><span>周五</span><span>周六</span><span>周日</span>
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card className="col-span-3">
+      <div className="grid gap-4 md:grid-cols-1 lg:grid-cols-1">
+        <Card>
           <CardHeader>
             <CardTitle>最新操作记录</CardTitle>
           </CardHeader>
@@ -209,7 +189,7 @@ export default function Dashboard() {
                         <p className="text-xs text-slate-500">{log.detail || `账号: ${log.target_id}`}</p>
                       </div>
                       <div className="text-right">
-                        <p className="text-xs font-medium text-slate-500">{formatTime(log.created_at)}</p>
+                        <p className="text-xs font-medium text-slate-500">{formatTime(log.operation_time)}</p>
                         <span className={`inline-block px-2 py-0.5 rounded text-[10px] mt-1 ${
                           status === 'success' ? 'bg-green-100 text-green-700' :
                           status === 'warning' ? 'bg-orange-100 text-orange-700' :
