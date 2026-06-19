@@ -24,3 +24,7 @@ sourcecode/target/
 
 # frontend
 frontend/node_modules
+
+# MACOS
+.DS_Store
+**/.DS_Store
