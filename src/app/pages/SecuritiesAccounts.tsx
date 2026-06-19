@@ -6,6 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from ".
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "../components/ui/dialog";
 import { Label } from "../components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
+import { api } from "../lib/api";
 
 // Mock Data
 const MOCK_ACCOUNTS = [
@@ -23,21 +24,43 @@ export default function SecuritiesAccounts() {
   const [isChecking, setIsChecking] = useState(false);
   const [checkError, setCheckError] = useState("");
 
-  const handleCreateAccount = () => {
+  const handleCreateAccount = async () => {
     setIsChecking(true);
     setCheckError("");
-    setTimeout(() => {
+    
+    // 获取开户人姓名（根据账户类型从不同字段获取）
+    const activeTab = document.querySelector('[data-state="active"]')?.getAttribute('value') || 'individual';
+    const nameInput = activeTab === 'individual' 
+      ? document.getElementById('name') as HTMLInputElement
+      : document.getElementById('corpName') as HTMLInputElement;
+    const userName = nameInput?.value || '';
+    
+    if (!userName) {
+      setCheckError("请输入开户人姓名或公司名称以供黑名单核查");
       setIsChecking(false);
-      if (newAccountId.endsWith('334X') || newAccountId.includes('涉案')) {
-        setCheckError("联网核查失败：该证件号已被列入监管黑名单（异常管控），拒绝开户！");
+      return;
+    }
+    
+    try {
+      // 调用黑名单检查API（六号API）
+      const isBlacklisted = await api.checkBlacklist(userName);
+      
+      if (isBlacklisted) {
+        setCheckError("联网核查失败：该用户已被列入交易管理系统黑名单（异常管控），拒绝开户！");
       } else if (!newAccountId) {
         setCheckError("请输入有效的证件号码进行核查");
       } else {
+        // 黑名单检查通过，继续开户流程
         setIsAccountModalOpen(false);
         setNewAccountId("");
         setCheckError("");
+        // TODO: 调用实际的开户API
       }
-    }, 1200);
+    } catch (error) {
+      setCheckError("黑名单查询服务暂时不可用，请稍后重试");
+    } finally {
+      setIsChecking(false);
+    }
   };
 
   return (

@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Plus, Search, DollarSign, RefreshCw, XCircle, Link as LinkIcon, ShieldAlert } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "../components/ui/dialog";
 import { Label } from "../components/ui/label";
+import { api } from "../lib/api";
 
 // Mock Data
 const MOCK_FUNDS = [
@@ -26,21 +27,40 @@ export default function FundAccounts() {
   const [isChecking, setIsChecking] = useState(false);
   const [checkError, setCheckError] = useState("");
 
-  const handleCreateFundAccount = () => {
+  const handleCreateFundAccount = async () => {
     setIsChecking(true);
     setCheckError("");
-    setTimeout(() => {
+    
+    // 获取开户人姓名（从表单中获取）
+    const nameInput = document.getElementById('name') as HTMLInputElement;
+    const userName = nameInput?.value || '';
+    
+    if (!userName) {
+      setCheckError("请输入开户人姓名以供黑名单核查");
       setIsChecking(false);
-      if (newAccountId.endsWith('334X') || newAccountId.includes('涉案')) {
-        setCheckError("联网核查拦截：该证件号或证券账户隶属监管黑名单，禁止开立资金账户！");
+      return;
+    }
+    
+    try {
+      // 调用黑名单检查API（六号API）
+      const isBlacklisted = await api.checkBlacklist(userName);
+      
+      if (isBlacklisted) {
+        setCheckError("联网核查拦截：该用户已被列入交易管理系统黑名单，禁止开立资金账户！");
       } else if (!newAccountId) {
         setCheckError("请输入有效的开户人证件信息以供核查");
       } else {
+        // 黑名单检查通过，继续开户流程
         setIsAccountModalOpen(false);
         setNewAccountId("");
         setCheckError("");
+        // TODO: 调用实际的开户API
       }
-    }, 1200);
+    } catch (error) {
+      setCheckError("黑名单查询服务暂时不可用，请稍后重试");
+    } finally {
+      setIsChecking(false);
+    }
   };
 
   const handleAction = (account: typeof MOCK_FUNDS[0], action: 'deposit' | 'withdraw') => {
@@ -72,6 +92,10 @@ export default function FundAccounts() {
             <div className="grid gap-6 py-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
+                  <Label htmlFor="name">开户人姓名</Label>
+                  <Input id="name" placeholder="请输入真实姓名（用于黑名单核查）" />
+                </div>
+                <div className="space-y-2">
                   <Label htmlFor="secId">关联证券账户号码</Label>
                   <div className="relative">
                     <LinkIcon className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-500" />
@@ -80,7 +104,15 @@ export default function FundAccounts() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="idNum">开户人身份证号 / 注册号</Label>
-                  <Input id="idNum" placeholder="输入证件号 (尾号 334X 模拟拦截)" value={newAccountId} onChange={(e) => { setNewAccountId(e.target.value); setCheckError(""); }} />
+                  <Input id="idNum" placeholder="输入证件号" value={newAccountId} onChange={(e) => { setNewAccountId(e.target.value); setCheckError(""); }} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="currency">币种</Label>
+                  <select id="currency" className="flex h-10 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm">
+                    <option value="CNY">人民币 (CNY)</option>
+                    <option value="USD">美元 (USD)</option>
+                    <option value="HKD">港币 (HKD)</option>
+                  </select>
                 </div>
               </div>
 

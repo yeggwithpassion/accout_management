@@ -19,12 +19,20 @@ export default function Login() {
     try {
       if (mode === "user") {
         const result = await api.userLogin(accountNo, password);
-        api.setToken(result.token);
-        navigate("/user");
+        // Java后端返回: auth_token, fund_acc_no, sec_acc_no, status
+        if (result.auth_token) {
+          navigate("/user");
+        } else {
+          throw new Error("登录失败，未获取到认证令牌");
+        }
       } else {
         const result = await api.adminLogin(accountNo, password);
-        api.setToken(result.token);
-        navigate("/");
+        // Java后端返回: staff_auth_token
+        if (result.staff_auth_token) {
+          navigate("/");
+        } else {
+          throw new Error("登录失败，未获取到认证令牌");
+        }
       }
     } catch (err: any) {
       setError(err.message || "登录失败");

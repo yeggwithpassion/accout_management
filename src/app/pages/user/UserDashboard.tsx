@@ -20,15 +20,38 @@ export default function UserDashboard() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [accountData, holdingsData] = await Promise.all([
-        api.getMyAccount(),
-        api.getHoldings(),
-      ]);
-      setAccount(accountData);
-      setHoldings(holdingsData);
+      const accountData = await api.getFundSnapshot();
+      // Java后端返回的数据格式: available_balance, frozen_balance, total_balance, status, fund_acc_no 等
+      setAccount({
+        accountNo: accountData.fund_acc_no || localStorage.getItem('fund_acc_no'),
+        balance: accountData.available_balance || 0,
+        frozenAmount: accountData.frozen_balance || 0,
+        totalBalance: accountData.total_balance || 0,
+        status: accountData.status,
+        name: accountData.name || '用户',
+      });
+      
+      // 从证券账户快照获取持仓信息
+      try {
+        const securityData = await api.getSecuritySnapshot();
+        if (securityData.holdings && Array.isArray(securityData.holdings)) {
+          setHoldings(securityData.holdings.map((h: any) => ({
+            stock_code: h.stock_code,
+            name: h.stock_name || h.stock_code,
+            total_volume: h.total_qty || 0,
+            available_volume: h.available_qty || 0,
+            cost_price: h.avg_cost || 0,
+            current_price: h.current_price || 0,
+          })));
+        } else {
+          setHoldings([]);
+        }
+      } catch (e) {
+        setHoldings([]);
+      }
     } catch (err: any) {
       setError(err.message || "加载数据失败");
-      if (err.message?.includes("认证")) {
+      if (err.message?.includes("认证") || err.message?.includes("鉴权") || err.message?.includes("token")) {
         navigate("/login");
       }
     } finally {
