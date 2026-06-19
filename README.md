@@ -18,9 +18,14 @@
 ### 1.1 顶层目录
 
 - `src/`：主代码与测试代码
-- `scripts/`：数据库建表、视图、测试数据、MySQL 冒烟脚本
+- `scripts/`：数据库建表、视图、测试数据、可选存储过程，以及 MySQL 冒烟/现行 schema 脚本
 - `docs/`：设计文档、测试文档、实验大纲等补充材料
 - `pom.xml`：Maven 构建配置
+
+说明：
+
+- 原始核心脚本仍是 4 个：`01_create_tables.sql`、`02_views.sql`、`03_test_data.sql`、`04_optional_procedures.sql`
+- 后来新增的 `mysql_schema_current.sql` 和 `mysql_seed_smoke.sql` 是为了真实 MySQL 建库/冒烟测试补的辅助脚本，不是替代原来的 4 个
 
 ### 1.2 主代码结构
 
@@ -636,18 +641,26 @@ mvn -Dtest=RealMySqlIntegrationTest test
 
 ### 6.5 真实 MySQL 测试说明
 
-真实 MySQL 测试默认使用：
+真实 MySQL 测试默认约定：
 
 - Host：`localhost`
 - Port：`3306`
-- Username：`root`
-- Password：`mutsumiZZL520!`
+- Username：通过 `account.test.mysql.username` 传入
+- Password：通过 `account.test.mysql.password` 传入
 
 说明：
 
 - 每个真实 MySQL 测试方法会创建独立测试库，避免互相删库冲突
 - 真实测试已实际跑通
 - 真实测试过程中修复过一个真实约束问题：证券账户补办时 `linked_fund_acc` 唯一约束冲突
+
+启动示例：
+
+```bash
+mvn -Dtest=RealMySqlIntegrationTest ^
+    -Daccount.test.mysql.username=your_user ^
+    -Daccount.test.mysql.password=your_password test
+```
 
 ### 6.6 当前结论
 

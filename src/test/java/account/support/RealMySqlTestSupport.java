@@ -13,8 +13,8 @@ public final class RealMySqlTestSupport {
     private static final String DEFAULT_HOST = "localhost";
     private static final String DEFAULT_PORT = "3306";
     private static final String DEFAULT_DATABASE = "account_db_it";
-    private static final String DEFAULT_USERNAME = "root";
-    private static final String DEFAULT_PASSWORD = "mutsumiZZL520!";
+    private static final String DEFAULT_USERNAME = "";
+    private static final String DEFAULT_PASSWORD = "";
     private static final String URL_SUFFIX = "?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai&characterEncoding=utf-8";
     private static final AtomicLong DATABASE_SEQUENCE = new AtomicLong(System.nanoTime());
     private static final ThreadLocal<String> CURRENT_DATABASE = new ThreadLocal<>();
