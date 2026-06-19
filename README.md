@@ -693,9 +693,7 @@ frontend/
 │   │   │   ├── SecuritiesAccounts.tsx  # 证券账户管理
 │   │   │   ├── Login.tsx           # 登录页面
 │   │   │   └── user/               # 用户端页面
-│   │   │       ├── UserDashboard.tsx   # 用户仪表盘
-│   │   │       ├── Trade.tsx           # 交易页面
-│   │   │       ├── Market.tsx          # 行情页面
+│   │   │       ├── UserDashboard.tsx   # 投资者账户查询
 │   │   │       └── Transfer.tsx        # 银证转账
 │   │   ├── lib/
 │   │   │   └── api.ts         # API封装，对接Java后端
@@ -710,7 +708,7 @@ frontend/
 
 前端 `api.ts` 已配置对接本Java后端：
 
-- **API_BASE**: `http://localhost:8080/api` - 账户业务子系统
+- **API_BASE**: `/api` - 由 Vite 代理到 `http://localhost:8080` 的账户业务子系统
 - **TRADE_MANAGEMENT_API_BASE**: `http://localhost:8081/api/trade-management` - 交易管理系统（黑名单服务）
 
 #### 7.2.1 外部接口（投资者端）
@@ -804,7 +802,7 @@ npm run dev
 
 ### 8.4 访问系统
 
-#### 投资者端（用户交易端）
+#### 投资者端（账户查询端）
 - 地址: `http://localhost:5173/login`
 - 测试账户: 使用数据库中预置的资金账户和密码登录
 

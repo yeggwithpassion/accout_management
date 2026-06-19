@@ -1,13 +1,11 @@
 import { Outlet, NavLink } from "react-router";
 import { 
-  LineChart, 
-  Wallet, 
+  Wallet,
   LayoutDashboard, 
   Settings,
   LogOut,
   Menu,
   Bell,
-  ArrowRightLeft,
   Briefcase
 } from "lucide-react";
 import { useState } from "react";
@@ -17,8 +15,6 @@ export function UserLayout() {
 
   const navigation = [
     { name: '我的账户', href: '/user', icon: LayoutDashboard, end: true },
-    { name: '行情中心', href: '/user/market', icon: LineChart },
-    { name: '交易大厅', href: '/user/trade', icon: ArrowRightLeft },
     { name: '银证转账', href: '/user/transfer', icon: Wallet },
   ];
 
@@ -33,7 +29,7 @@ export function UserLayout() {
         <div className="h-16 flex items-center justify-center border-b border-red-800">
           <div className="flex items-center gap-2 font-bold text-white text-xl">
             <Briefcase className="text-white" />
-            {sidebarOpen && <span>StockSys 交易端</span>}
+            {sidebarOpen && <span>账户管理端</span>}
           </div>
         </div>
 
@@ -89,7 +85,7 @@ export function UserLayout() {
           <div className="flex items-center gap-4">
             <div className="hidden sm:flex items-center text-sm font-medium text-slate-600 bg-slate-100 px-3 py-1.5 rounded-full">
               <span className="w-2 h-2 rounded-full bg-green-500 mr-2"></span>
-              交易时段
+              账户服务
             </div>
             <button className="text-slate-500 hover:text-red-600 relative transition-colors">
               <Bell className="w-5 h-5" />

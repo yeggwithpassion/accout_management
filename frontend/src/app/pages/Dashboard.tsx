@@ -7,7 +7,7 @@ export default function Dashboard() {
     { name: "证券账户总数", value: "1,245", change: "+12.5%", icon: Users, color: "text-red-500", bg: "bg-red-100" },
     { name: "资金账户总数", value: "1,180", change: "+10.2%", icon: CreditCard, color: "text-red-500", bg: "bg-red-100" },
     { name: "今日新开户", value: "24", change: "+4.5%", icon: Building, color: "text-red-500", bg: "bg-red-100" },
-    { name: "异常交易提醒", value: "3", change: "-2.0%", icon: Activity, color: "text-red-500", bg: "bg-red-100" },
+    { name: "异常账户提醒", value: "3", change: "-2.0%", icon: Activity, color: "text-red-500", bg: "bg-red-100" },
   ];
 
   return (

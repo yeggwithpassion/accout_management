@@ -20,8 +20,6 @@ import FundAccounts from "./pages/FundAccounts";
 
 import { UserLayout } from "./components/UserLayout";
 import UserDashboard from "./pages/user/UserDashboard";
-import Market from "./pages/user/Market";
-import Trade from "./pages/user/Trade";
 import Transfer from "./pages/user/Transfer";
 
 export const router = createBrowserRouter([
@@ -46,8 +44,6 @@ export const router = createBrowserRouter([
     errorElement: <ErrorBoundary />,
     children: [
       { index: true, Component: UserDashboard },
-      { path: "market", Component: Market },
-      { path: "trade", Component: Trade },
       { path: "transfer", Component: Transfer },
     ],
   }

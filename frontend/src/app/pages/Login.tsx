@@ -50,9 +50,9 @@ export default function Login() {
               <Briefcase className="w-8 h-8 text-white" />
             </div>
           </div>
-          <CardTitle className="text-2xl">股票交易系统</CardTitle>
+          <CardTitle className="text-2xl">账户管理系统</CardTitle>
           <p className="text-slate-500 text-sm mt-1">
-            {mode === "user" ? "交易客户端登录" : "管理后台登录"}
+            {mode === "user" ? "投资者账户登录" : "管理后台登录"}
           </p>
         </CardHeader>
         <CardContent>
@@ -63,7 +63,7 @@ export default function Login() {
               }`}
               onClick={() => setMode("user")}
             >
-              交易端
+              投资者端
             </button>
             <button
               className={`flex-1 py-2 rounded-md text-sm font-medium transition-colors ${

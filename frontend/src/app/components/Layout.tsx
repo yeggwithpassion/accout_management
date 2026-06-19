@@ -81,7 +81,7 @@ export function Layout() {
 
           <div className="flex items-center gap-4">
             <NavLink to="/user" className="hidden sm:flex text-sm font-medium text-red-600 bg-red-50 px-4 py-1.5 rounded-full hover:bg-red-100 transition-colors">
-              切换至用户交易端
+              切换至投资者账户端
             </NavLink>
             <button className="text-slate-500 hover:text-slate-700 relative">
               <Bell className="w-5 h-5" />

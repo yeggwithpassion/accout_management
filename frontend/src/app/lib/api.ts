@@ -1,4 +1,4 @@
-const API_BASE = 'http://localhost:8080/api';
+const API_BASE = '/api';
 const TRADE_MANAGEMENT_API_BASE = 'http://localhost:8081/api/trade-management';
 
 class ApiClient {
@@ -150,51 +150,6 @@ class ApiClient {
     return this.request(url);
   }
 
-  // ==================== Stocks & Market (Mock - Java后端暂无这些接口) ====================
-
-  async getStocks(keyword?: string, page = 1, limit = 20) {
-    // 临时返回空数据，Java后端暂无此接口
-    return { stocks: [], total: 0, page, limit };
-  }
-
-  async getStockDetail(code: string) {
-    // 临时返回空数据，Java后端暂无此接口
-    return { code, name: code, current_price: 0 };
-  }
-
-  // ==================== User Trading (Mock - Java后端暂无这些接口) ====================
-
-  async getHoldings() {
-    // 临时返回空数据，Java后端暂无此接口
-    return [];
-  }
-
-  async getOrders(status?: string, page = 1, limit = 20) {
-    // 临时返回空数据，Java后端暂无此接口
-    return { orders: [], total: 0, page, limit };
-  }
-
-  async submitOrder(stockCode: string, orderType: 'buy' | 'sell', price: number, volume: number) {
-    // 临时模拟，Java后端暂无此接口
-    return { orderId: 'MOCK_' + Date.now() };
-  }
-
-  async cancelOrder(orderId: string) {
-    // 临时模拟，Java后端暂无此接口
-    return { success: true };
-  }
-
-  async getTransactions(page = 1, limit = 50) {
-    // 临时返回空数据，Java后端暂无此接口
-    return { transactions: [], total: 0, page, limit };
-  }
-
-  async getTrades(page = 1, limit = 20) {
-    // 临时返回空数据，Java后端暂无此接口
-    return { trades: [], total: 0, page, limit };
-  }
-
-  // 兼容旧接口，重定向到新的getFundSnapshot
   async getMyAccount() {
     return this.getFundSnapshot();
   }
@@ -382,102 +337,12 @@ class ApiClient {
     }
   }
 
-  // ==================== 兼容旧接口（已废弃或模拟）====================
-
-  async getAdminStats() {
-    return { totalAccounts: 0, totalOrders: 0, totalTrades: 0 };
-  }
-
-  async getAllOrders(stockCode?: string, orderType?: string, status?: string, page = 1, limit = 50) {
-    return { orders: [], total: 0, page, limit };
-  }
-
-  async getStockOrders(code: string) {
-    return { orders: [] };
-  }
-
-  async getAllTrades(stockCode?: string, page = 1, limit = 50) {
-    return { trades: [], total: 0, page, limit };
-  }
-
-  async getSecuritiesAccounts(status?: string, page = 1, limit = 20) {
-    return { accounts: [], total: 0, page, limit };
-  }
-
-  async getSecuritiesAccountDetail(accountNo: string) {
-    return { accountNo };
-  }
-
-  async lossSecuritiesAccount(accountNo: string) {
-    return this.reportSecurityLoss(accountNo, '用户挂失');
-  }
-
-  async reissueSecuritiesAccount(accountNo: string) {
-    return this.reissueSecurityAccount(accountNo, '用户补办');
-  }
-
-  async closeSecuritiesAccount(accountNo: string) {
-    return this.closeSecurityAccount(accountNo, '用户销户');
-  }
-
-  async getFundAccounts(status?: string, page = 1, limit = 20) {
-    return { accounts: [], total: 0, page, limit };
-  }
-
-  async depositOrWithdraw(accountNo: string, amount: number, type: 'deposit' | 'withdraw') {
-    // 这里需要id_number，需要从前端传过来或使用默认值
-    if (type === 'deposit') {
-      return this.deposit(accountNo, amount, '');
-    } else {
-      return this.withdraw(accountNo, amount, '', '');
-    }
-  }
-
-  async setStockLimit(code: string, limitPercent: number, isSt: boolean) {
-    return { success: true };
-  }
-
-  async toggleStockTrading(code: string) {
-    return { success: true };
-  }
-
-  async changeAdminPassword(oldPassword: string, newPassword: string) {
-    // Java后端暂无此接口
-    return { success: true };
-  }
-
   async bankTransfer(direction: 'bank_to_securities' | 'securities_to_bank', amount: number, withdrawPassword: string) {
-    // Java后端暂无此接口
+    // Java 后端暂未提供银证转账接口，保留页面等待后续联调。
     return { success: true, newBalance: 0 };
   }
+
 }
 
 // Singleton instance
 export const api = new ApiClient();
-
-// WebSocket connection management
-export function connectMarketWebSocket(onMessage: (data: any) => void): WebSocket {
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const host = window.location.host;
-  const wsUrl = `${protocol}//${host}/ws`;
-  const ws = new WebSocket(wsUrl);
-
-  ws.onmessage = (event) => {
-    try {
-      const data = JSON.parse(event.data);
-      onMessage(data);
-    } catch (e) {
-      console.error('WebSocket parse error:', e);
-    }
-  };
-
-  ws.onclose = () => {
-    console.log('WebSocket disconnected');
-  };
-
-  ws.onerror = (error) => {
-    console.error('WebSocket error:', error);
-  };
-
-  return ws;
-}
