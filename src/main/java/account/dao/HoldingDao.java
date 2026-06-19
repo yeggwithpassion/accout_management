@@ -11,7 +11,7 @@ import java.util.Optional;
 public final class HoldingDao extends BaseJdbcDao {
 
     private static final String SELECT_COLUMNS = """
-            select holding_id, sec_acc_no, stock_code, quantity, frozen_quantity, avg_cost, updated_at
+            select holding_id, sec_acc_no, stock_code, stock_name, quantity, frozen_quantity, avg_cost, updated_at
               from holding
             """;
 
@@ -19,6 +19,7 @@ public final class HoldingDao extends BaseJdbcDao {
             resultSet.getLong("holding_id"),
             resultSet.getString("sec_acc_no"),
             resultSet.getString("stock_code"),
+            resultSet.getString("stock_name"),
             resultSet.getInt("quantity"),
             resultSet.getInt("frozen_quantity"),
             resultSet.getBigDecimal("avg_cost"),
@@ -74,23 +75,26 @@ public final class HoldingDao extends BaseJdbcDao {
         if (existing.isPresent()) {
             String sql = """
                     update holding
-                       set quantity = ?,
+                       set stock_name = ?,
+                           quantity = ?,
                            frozen_quantity = ?,
                            avg_cost = ?,
                            updated_at = ?
                      where holding_id = ?
                     """;
             executor.update(connection, sql, statement -> {
-                statement.setInt(1, holding.quantity());
-                statement.setInt(2, holding.frozenQuantity());
-                statement.setBigDecimal(3, holding.avgCost());
-                statement.setTimestamp(4, toSqlTimestamp(now));
-                statement.setLong(5, existing.get().holdingId());
+                statement.setString(1, holding.stockName());
+                statement.setInt(2, holding.quantity());
+                statement.setInt(3, holding.frozenQuantity());
+                statement.setBigDecimal(4, holding.avgCost());
+                statement.setTimestamp(5, toSqlTimestamp(now));
+                statement.setLong(6, existing.get().holdingId());
             });
             return new Holding(
                     existing.get().holdingId(),
                     holding.secAccNo(),
                     holding.stockCode(),
+                    holding.stockName(),
                     holding.quantity(),
                     holding.frozenQuantity(),
                     holding.avgCost(),
@@ -99,17 +103,27 @@ public final class HoldingDao extends BaseJdbcDao {
         }
 
         String sql = """
-                insert into holding (sec_acc_no, stock_code, quantity, frozen_quantity, avg_cost, updated_at)
-                values (?, ?, ?, ?, ?, ?)
+                insert into holding (sec_acc_no, stock_code, stock_name, quantity, frozen_quantity, avg_cost, updated_at)
+                values (?, ?, ?, ?, ?, ?, ?)
                 """;
         long holdingId = executor.insertAndReturnKey(connection, sql, statement -> {
             statement.setString(1, holding.secAccNo());
             statement.setString(2, holding.stockCode());
-            statement.setInt(3, holding.quantity());
-            statement.setInt(4, holding.frozenQuantity());
-            statement.setBigDecimal(5, holding.avgCost());
-            statement.setTimestamp(6, toSqlTimestamp(now));
+            statement.setString(3, holding.stockName());
+            statement.setInt(4, holding.quantity());
+            statement.setInt(5, holding.frozenQuantity());
+            statement.setBigDecimal(6, holding.avgCost());
+            statement.setTimestamp(7, toSqlTimestamp(now));
         });
-        return new Holding(holdingId, holding.secAccNo(), holding.stockCode(), holding.quantity(), holding.frozenQuantity(), holding.avgCost(), now);
+        return new Holding(
+                holdingId,
+                holding.secAccNo(),
+                holding.stockCode(),
+                holding.stockName(),
+                holding.quantity(),
+                holding.frozenQuantity(),
+                holding.avgCost(),
+                now
+        );
     }
 }

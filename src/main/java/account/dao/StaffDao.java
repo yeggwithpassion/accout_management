@@ -9,7 +9,7 @@ import java.util.Optional;
 public final class StaffDao extends BaseJdbcDao {
 
     private static final String SELECT_COLUMNS = """
-            select staff_id, username, password_hash, permission_level, created_at
+            select staff_id, username, password_hash, status, created_at
               from staff
             """;
 
@@ -17,7 +17,7 @@ public final class StaffDao extends BaseJdbcDao {
             resultSet.getInt("staff_id"),
             resultSet.getString("username"),
             resultSet.getString("password_hash"),
-            resultSet.getInt("permission_level"),
+            resultSet.getString("status"),
             getLocalDateTime(resultSet, "created_at")
     );
 
@@ -46,13 +46,13 @@ public final class StaffDao extends BaseJdbcDao {
                 update staff
                    set username = ?,
                        password_hash = ?,
-                       permission_level = ?
+                       status = ?
                  where staff_id = ?
                 """;
         return executor.update(connection, sql, statement -> {
             statement.setString(1, staff.username());
             statement.setString(2, staff.passwordHash());
-            statement.setInt(3, staff.permissionLevel());
+            statement.setString(3, staff.status());
             statement.setInt(4, staff.staffId());
         }) > 0;
     }

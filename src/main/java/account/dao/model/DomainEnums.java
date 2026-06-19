@@ -12,8 +12,8 @@ public final class DomainEnums {
     }
 
     public enum InvestorType implements DbValueEnum {
-        PERSONAL("\u4e2a\u4eba"),
-        LEGAL_ENTITY("\u6cd5\u4eba");
+        PERSONAL("个人"),
+        LEGAL_ENTITY("法人");
 
         private final String dbValue;
 
@@ -32,11 +32,12 @@ public final class DomainEnums {
     }
 
     public enum AccountStatus implements DbValueEnum {
-        NORMAL("\u6b63\u5e38"),
-        LOSS_FROZEN("\u6302\u5931\u51bb\u7ed3"),
-        VIOLATION_FROZEN("\u8fdd\u89c4\u51bb\u7ed3"),
-        PRE_CLOSE("\u9884\u9500\u6237"),
-        CLOSED("\u5df2\u9500\u6237");
+        NORMAL("正常"),
+        LOSS_FROZEN("挂失冻结"),
+        VIOLATION_FROZEN("违规冻结"),
+        NO_FUND_FROZEN("无资金账户冻结"),
+        PRE_CLOSE("预销户"),
+        CLOSED("已销户");
 
         private final String dbValue;
 
@@ -55,13 +56,13 @@ public final class DomainEnums {
     }
 
     public enum FundTransactionType implements DbValueEnum {
-        DEPOSIT("\u5b58\u6b3e"),
-        WITHDRAW("\u53d6\u6b3e"),
-        BUY_FREEZE("\u4e70\u5165\u51bb\u7ed3"),
-        BUY_DEBIT("\u4e70\u5165\u6263\u6b3e"),
-        SELL_RETURN("\u5356\u51fa\u56de\u6b3e"),
-        CANCEL_RELEASE("\u64a4\u5355\u89e3\u51bb"),
-        INTEREST("\u7ed3\u606f");
+        DEPOSIT("存款"),
+        WITHDRAW("取款"),
+        BUY_FREEZE("买入冻结"),
+        BUY_DEBIT("买入扣款"),
+        SELL_RETURN("卖出回款"),
+        CANCEL_RELEASE("撤单解冻"),
+        INTEREST("结息");
 
         private final String dbValue;
 
@@ -128,6 +129,7 @@ public final class DomainEnums {
         return Arrays.stream(type.getEnumConstants())
                 .filter(value -> value.dbValue().equals(dbValue))
                 .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("Unsupported db value '" + dbValue + "' for " + type.getSimpleName()));
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Unsupported db value '" + dbValue + "' for " + type.getSimpleName()));
     }
 }

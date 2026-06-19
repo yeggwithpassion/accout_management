@@ -65,6 +65,21 @@ public final class FundTransactionLogDao extends BaseJdbcDao {
         ).isPresent();
     }
 
+    public boolean existsByRefOrderIdAndTxnType(Connection connection, String refOrderId, FundTransactionType transactionType) {
+        if (refOrderId == null || refOrderId.isBlank()) {
+            return false;
+        }
+        return executor.queryOne(
+                connection,
+                "select 1 from fund_transaction_log where ref_order_id = ? and txn_type = ? limit 1",
+                statement -> {
+                    statement.setString(1, refOrderId);
+                    statement.setString(2, transactionType.dbValue());
+                },
+                resultSet -> resultSet.getInt(1)
+        ).isPresent();
+    }
+
     public List<FundTransactionLog> listRecentByFundAccountNo(String fundAccNo, int limit) {
         return executor.queryList(
                 SELECT_COLUMNS + " where fund_acc_no = ? order by txn_time desc, log_id desc limit ?",

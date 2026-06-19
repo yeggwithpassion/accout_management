@@ -4,6 +4,8 @@ import account.dao.core.ConnectionProvider;
 import account.dao.core.DriverManagerConnectionProvider;
 import account.dao.core.JdbcExecutor;
 import account.dao.core.TransactionManager;
+import account.integration.BlacklistClient;
+import account.service.AccountBlacklistSupport;
 import java.util.Objects;
 
 public final class DaoRegistry {
@@ -15,10 +17,9 @@ public final class DaoRegistry {
     private final FundAccountDao fundAccountDao;
     private final FundTransactionLogDao fundTransactionLogDao;
     private final HoldingDao holdingDao;
+    private final HoldingChangeLogDao holdingChangeLogDao;
     private final OperationLogDao operationLogDao;
     private final StaffDao staffDao;
-    private final FreezeRecordDao freezeRecordDao;
-    private final BlacklistDao blacklistDao;
 
     public DaoRegistry(ConnectionProvider connectionProvider) {
         Objects.requireNonNull(connectionProvider, "connectionProvider");
@@ -29,10 +30,9 @@ public final class DaoRegistry {
         this.fundAccountDao = new FundAccountDao(executor);
         this.fundTransactionLogDao = new FundTransactionLogDao(executor);
         this.holdingDao = new HoldingDao(executor);
+        this.holdingChangeLogDao = new HoldingChangeLogDao(executor);
         this.operationLogDao = new OperationLogDao(executor);
         this.staffDao = new StaffDao(executor);
-        this.freezeRecordDao = new FreezeRecordDao(executor);
-        this.blacklistDao = new BlacklistDao(executor);
     }
 
     public static DaoRegistry forDriverManager(String url, String username, String password) {
@@ -63,6 +63,10 @@ public final class DaoRegistry {
         return holdingDao;
     }
 
+    public HoldingChangeLogDao holdingChangeLogDao() {
+        return holdingChangeLogDao;
+    }
+
     public OperationLogDao operationLogDao() {
         return operationLogDao;
     }
@@ -71,11 +75,7 @@ public final class DaoRegistry {
         return staffDao;
     }
 
-    public FreezeRecordDao freezeRecordDao() {
-        return freezeRecordDao;
-    }
-
-    public BlacklistDao blacklistDao() {
-        return blacklistDao;
+    public AccountBlacklistSupport blacklistSupport(BlacklistClient blacklistClient) {
+        return new AccountBlacklistSupport(blacklistClient, investorDao, securityAccountDao, fundAccountDao);
     }
 }
