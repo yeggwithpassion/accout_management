@@ -16,7 +16,7 @@ account:
   datasource:
     url: jdbc:mysql://localhost:3306/account_db?useSSL=false&serverTimezone=Asia/Shanghai&characterEncoding=utf-8
     username: root
-    password: root
+    password: mutsumiZZL520!
 
 logging:
   level:

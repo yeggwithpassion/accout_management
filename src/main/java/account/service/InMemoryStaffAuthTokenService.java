@@ -2,7 +2,9 @@ package account.service;
 
 import account.common.BusinessException;
 import account.common.ErrorCode;
+import account.service.api.StaffAuthTokenService;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.Clock;
@@ -18,6 +20,7 @@ public class InMemoryStaffAuthTokenService implements StaffAuthTokenService {
     private final long ttlMillis;
     private final Clock clock;
 
+    @Autowired
     public InMemoryStaffAuthTokenService(
             @Value("${account.staff-auth-token.ttl-seconds:28800}") long ttlSeconds) {
         this(ttlSeconds, Clock.systemDefaultZone());

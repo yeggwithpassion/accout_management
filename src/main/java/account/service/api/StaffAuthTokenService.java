@@ -1,4 +1,4 @@
-package account.service;
+package account.service.api;
 
 public interface StaffAuthTokenService {
 

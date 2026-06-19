@@ -2,6 +2,7 @@ package account.service;
 
 import account.common.BusinessException;
 import account.common.ErrorCode;
+import account.service.api.ClientAuthTokenService;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;

@@ -20,6 +20,8 @@ import account.dto.UpdateInvestorInfoRequest;
 import account.dto.UpdateSecurityHoldingRequest;
 import account.enums.AccountStatus;
 import account.integration.BlacklistClient;
+import account.service.api.ClientAuthTokenService;
+import account.service.api.SecurityAccountService;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
@@ -168,6 +170,9 @@ public class SecurityAccountServiceImpl implements SecurityAccountService {
             }
 
             String newSecAccNo = AccountNumberGenerator.generateSecurityAccountNo();
+            if (oldAccount.linkedFundAcc() != null && !oldAccount.linkedFundAcc().isBlank()) {
+                dao.securityAccountDao().unbindFundAccount(connection, request.getOldSecAccNo());
+            }
             dao.securityAccountDao().create(connection, new DomainModels.SecurityAccount(
                     newSecAccNo,
                     oldAccount.investorId(),

@@ -1,8 +1,8 @@
 # 账户业务子系统后端
 
-本仓库是证券账户与资金账户子系统的后端实现，当前只维护 `src/` 这一套代码。
+本仓库是证券账户与资金账户子系统的后端实现，当前统一维护 `src/` 这一套代码。
 
-当前统一约定如下：
+当前约定如下：
 
 - 接口统一使用 `/api/...`，不再保留 `/api/v1/...`
 - 不维护本地 `blacklist` 表，黑名单通过外部桥接校验
@@ -11,79 +11,104 @@
 - 业务顺序为先开证券账户，再开资金账户；资金账户创建后自动绑定证券账户
 - 投资者侧通过本系统签发 `auth_token`
 - 工作人员侧通过本系统签发 `X-Staff-Auth-Token`
-- 交易回调采用“交易号 + 动作类型 + 金额/数量”的模型，本系统自己落资金流水和持仓变动日志
+- 交易回调采用“交易号 + 动作类型 + 金额/数量”的模型，本系统自行落资金流水和持仓变动日志
 
 ## 1. 代码结构
 
 ### 1.1 顶层目录
 
 - `src/`：主代码与测试代码
-- `scripts/`：数据库建表、视图、测试数据脚本
-- `docs/`：补充设计文档、接口文档、实验大纲等
+- `scripts/`：数据库建表、视图、测试数据、MySQL 冒烟脚本
+- `docs/`：设计文档、测试文档、实验大纲等补充材料
 - `pom.xml`：Maven 构建配置
 
-### 1.2 Java 包结构
+### 1.2 主代码结构
 
-`src/main/java/account/` 下主要目录如下：
+`src/main/java/account/` 主要目录如下：
 
-- `common/`：通用返回体、错误码、业务异常、请求头常量
-- `config/`：Spring 配置
+- `common/`：统一返回体、错误码、业务异常、请求头常量
+- `config/`：Spring 配置与 DAO 装配
 - `controller/`：HTTP 接口入口
 - `dao/`：数据库访问层
 - `dto/`：请求/响应 DTO
-- `enums/`：对外枚举定义
+- `enums/`：对外状态枚举
 - `exception/`：全局异常处理
-- `integration/`：外部桥接组件，例如黑名单桥接
-- `service/`：核心业务实现
-- `AccountManagementApplication.java`：Spring Boot 启动类
+- `integration/`：外部系统桥接，如黑名单桥接
+- `service/`：业务实现
+- `service/api/`：服务接口定义
 
 ### 1.3 Controller 分层
 
 `src/main/java/account/controller/internal/`
 
-- `StaffController`：工作人员登录、停用离职工作人员
-- `FundAccountController`：内部资金账户接口
-- `SecurityAccountController`：内部证券账户接口、投资者信息修改
+- `StaffController`：工作人员登录、停用工作人员
+- `FundAccountController`：资金账户内部接口
+- `SecurityAccountController`：证券账户内部接口、投资者信息修改
 
 `src/main/java/account/controller/external/`
 
-- `ExternalFundController`：投资者资金查询、登录、改密
+- `ExternalFundController`：投资者资金登录、查询、改密
 - `ExternalSecurityController`：投资者持仓查询
 - `ExternalTradeController`：中央交易系统回调接口
-- `AdminController`：冻结、解冻、强制销户、结息
-- `AuditController`：操作日志审计查询
+- `AdminController`：管理员接口入口
+- `AuditController`：审计接口入口
 
-### 1.4 Service 分工
+说明：
 
-- `SecurityAccountServiceImpl`：证券开户、挂失、补办、销户、投资者信息修改、持仓查询、持仓回调
+- 目前 `AdminController` / `AuditController` 代码仍保留，但不属于当前已完成联调范围
+
+### 1.4 Service 分层
+
+`src/main/java/account/service/api/`
+
+- `FundAccountService`
+- `SecurityAccountService`
+- `StaffService`
+- `ClientAuthTokenService`
+- `StaffAuthTokenService`
+- `AdminService`
+- `AuditService`
+
+`src/main/java/account/service/`
+
 - `FundAccountServiceImpl`：资金开户、存取款、改密、挂失、补办、销户、绑定解绑、资金查询、资金回调
-- `AdminServiceImpl`：管理员冻结、解冻、强制销户、年度结息
-- `AuditServiceImpl`：操作日志查询
-- `StaffServiceImpl`：工作人员登录、工作人员停用
-- `ClientAuthTokenService`：投资者 token 签发与校验
-- `StaffAuthTokenService`：工作人员 token 签发与校验
+- `SecurityAccountServiceImpl`：证券开户、挂失、补办、销户、投资者信息修改、持仓查询、持仓回调
+- `StaffServiceImpl`：工作人员登录、停用
+- `InMemoryClientAuthTokenService`：投资者 token 签发与校验
+- `InMemoryStaffAuthTokenService`：工作人员 token 签发与校验
+- `AdminServiceImpl`、`AuditServiceImpl`：保留实现
 
-### 1.5 其他关键目录
+### 1.5 测试代码结构
 
-- `src/main/resources/application.yml`：数据库与 Spring 配置
-- `src/test/java/account/`：单元测试与集成测试
-- `docs/API.md`：补充接口说明
-- `docs/代码结构说明.md`：更细粒度的代码结构说明
+`src/test/java/account/`
+
+- `dao/DaoIntegrationTest.java`：DAO 层集成测试
+- `service/AccountWorkflowServiceTest.java`：业务流程测试
+- `service/AccountBusinessRuleTest.java`：业务规则测试
+- `service/ClientAuthTokenServiceTest.java`：投资者 token 测试
+- `service/FundLogViewCompositionTest.java`：资金流水与持仓变动拼装测试
+- `integration/ApiIntegrationTest.java`：H2 + MockMvc 接口集成测试
+- `integration/BlacklistSupportTest.java`：黑名单桥接测试
+- `integration/RealMySqlIntegrationTest.java`：真实 MySQL 集成测试
+- `support/TestDatabaseSupport.java`：测试建库与测试数据支持
+- `support/RealMySqlTestSupport.java`：真实 MySQL 测试支持
 
 ## 2. 数据库字段、数据类型与关系
 
-初始化脚本：
+主要脚本：
 
 - `scripts/01_create_tables.sql`
 - `scripts/02_views.sql`
 - `scripts/03_test_data.sql`
 - `scripts/04_optional_procedures.sql`
+- `scripts/mysql_schema_current.sql`
+- `scripts/mysql_seed_smoke.sql`
 
-### 2.1 关系总览
+### 2.1 关系概览
 
 ```text
 investor 1 --- n security_account
-security_account 1 --- 1 fund_account
+security_account 1 --- 0..1 fund_account
 security_account 1 --- n holding
 security_account 1 --- n holding_change_log
 fund_account 1 --- n fund_transaction_log
@@ -96,14 +121,14 @@ fund_account.sec_acc_no          -> security_account.sec_acc_no
 
 ### 2.2 表结构
 
-#### `investor`
+#### investor
 
 投资者主数据表。
 
 | 字段 | 类型 | 约束 | 说明 |
 |---|---|---|---|
 | `investor_id` | `INT` | PK, AUTO_INCREMENT | 投资者主键 |
-| `type` | `ENUM('个人','法人')` | NOT NULL | 投资者类型 |
+| `type` | `VARCHAR(20)` | NOT NULL | 投资者类型 |
 | `name` | `VARCHAR(100)` | NOT NULL | 姓名或法人名称 |
 | `gender` | `VARCHAR(10)` | NULL | 性别 |
 | `id_type` | `VARCHAR(20)` | NOT NULL | 证件类型 |
@@ -123,16 +148,16 @@ fund_account.sec_acc_no          -> security_account.sec_acc_no
 | `agent_id_number` | `VARCHAR(50)` | NULL | 代理人证件号 |
 | `created_at` | `DATETIME` | NOT NULL | 创建时间 |
 
-#### `staff`
+#### staff
 
-工作人员账号表。
+工作人员账户表。
 
 | 字段 | 类型 | 约束 | 说明 |
 |---|---|---|---|
-| `staff_id` | `INT` | PK, AUTO_INCREMENT | 工作人员主键 |
+| `staff_id` | `INT` | PK | 工作人员主键 |
 | `username` | `VARCHAR(50)` | NOT NULL, UNIQUE | 登录名 |
 | `password_hash` | `VARCHAR(128)` | NOT NULL | 密码哈希 |
-| `status` | `ENUM('正常','禁用')` | NOT NULL | 账号状态 |
+| `status` | `VARCHAR(20)` | NOT NULL | 账户状态 |
 | `created_at` | `DATETIME` | NOT NULL | 创建时间 |
 
 说明：
@@ -140,7 +165,7 @@ fund_account.sec_acc_no          -> security_account.sec_acc_no
 - 工作人员离职采用逻辑停用，不做物理删除
 - 原因是 `operation_log` 与 `fund_transaction_log` 需要保留审计引用
 
-#### `security_account`
+#### security_account
 
 证券账户主表。
 
@@ -148,11 +173,11 @@ fund_account.sec_acc_no          -> security_account.sec_acc_no
 |---|---|---|---|
 | `sec_acc_no` | `VARCHAR(20)` | PK | 证券账户号 |
 | `investor_id` | `INT` | NOT NULL, FK | 所属投资者 |
-| `status` | `ENUM('正常','挂失冻结','违规冻结','无资金账户冻结','预销户','已销户')` | NOT NULL | 账户状态 |
+| `status` | `VARCHAR(20)` | NOT NULL | 账户状态 |
 | `open_date` | `DATE` | NOT NULL | 开户日期 |
 | `linked_fund_acc` | `VARCHAR(20)` | NULL, UNIQUE, FK | 绑定资金账户号 |
 
-#### `fund_account`
+#### fund_account
 
 资金账户主表。
 
@@ -165,12 +190,12 @@ fund_account.sec_acc_no          -> security_account.sec_acc_no
 | `available_balance` | `DECIMAL(15,2)` | NOT NULL | 可用余额 |
 | `frozen_balance` | `DECIMAL(15,2)` | NOT NULL | 冻结余额 |
 | `currency` | `CHAR(3)` | NOT NULL | 币种 |
-| `status` | `ENUM('正常','挂失冻结','违规冻结','已销户')` | NOT NULL | 账户状态 |
+| `status` | `VARCHAR(20)` | NOT NULL | 账户状态 |
 | `open_date` | `DATE` | NOT NULL | 开户日期 |
 | `last_interest_date` | `DATE` | NULL | 上次结息日期 |
 | `annual_interest_rate` | `DECIMAL(5,4)` | NOT NULL | 年利率 |
 
-#### `fund_transaction_log`
+#### fund_transaction_log
 
 资金流水表。
 
@@ -178,7 +203,7 @@ fund_account.sec_acc_no          -> security_account.sec_acc_no
 |---|---|---|---|
 | `log_id` | `BIGINT` | PK, AUTO_INCREMENT | 流水主键 |
 | `fund_acc_no` | `VARCHAR(20)` | NOT NULL, FK | 资金账户号 |
-| `txn_type` | `ENUM('存款','取款','买入冻结','买入扣款','卖出回款','撤单解冻','结息')` | NOT NULL | 资金变动类型 |
+| `txn_type` | `VARCHAR(20)` | NOT NULL | 资金变动类型 |
 | `amount` | `DECIMAL(15,2)` | NOT NULL | 本次变动金额 |
 | `available_after` | `DECIMAL(15,2)` | NOT NULL | 变动后可用余额 |
 | `frozen_after` | `DECIMAL(15,2)` | NOT NULL | 变动后冻结余额 |
@@ -186,13 +211,7 @@ fund_account.sec_acc_no          -> security_account.sec_acc_no
 | `operator_id` | `INT` | NULL, FK | 柜台操作工作人员 |
 | `txn_time` | `DATETIME` | NOT NULL | 流水时间 |
 
-说明：
-
-- 柜台业务如存款、取款、结息通常由系统或工作人员写入
-- 交易相关流水由外部交易系统调用 `updateFundBalance` 触发写入
-- 与持仓变化的关联键是 `ref_order_id`
-
-#### `holding`
+#### holding
 
 当前持仓表。
 
@@ -211,7 +230,7 @@ fund_account.sec_acc_no          -> security_account.sec_acc_no
 
 - `(sec_acc_no, stock_code)` 唯一
 
-#### `holding_change_log`
+#### holding_change_log
 
 持仓变动日志表。
 
@@ -230,12 +249,7 @@ fund_account.sec_acc_no          -> security_account.sec_acc_no
 | `avg_cost_after` | `DECIMAL(15,4)` | NULL | 变动后均价 |
 | `txn_time` | `DATETIME` | NOT NULL | 变动时间 |
 
-说明：
-
-- 由 `updateSecurityHolding` 写入
-- 通过 `ref_order_id` 可与 `fund_transaction_log` 做业务关联
-
-#### `operation_log`
+#### operation_log
 
 工作人员操作日志表。
 
@@ -251,22 +265,21 @@ fund_account.sec_acc_no          -> security_account.sec_acc_no
 
 ### 2.3 视图
 
-`scripts/02_views.sql` 当前定义了 3 个视图：
+`scripts/02_views.sql` 当前定义了以下视图：
 
-- `v_fund_account_simple`：资金账户基础视图
-- `v_holding_available`：持仓可用数量视图
-- `v_investor_basic`：投资者基础信息视图
+- `v_fund_account_simple`
+- `v_holding_available`
+- `v_investor_basic`
 
-### 2.4 当前明确不保留的表
+### 2.4 当前不维护的表
 
 - `blacklist`
 - `freeze_record`
-- `permission`
-- 其他 RBAC 相关表
+- RBAC / permission 相关表
 
 ## 3. 外部接口
 
-外部接口主要分两类：
+外部接口分为两类：
 
 - 投资者客户端接口
 - 中央交易系统回调接口
@@ -280,28 +293,32 @@ fund_account.sec_acc_no          -> security_account.sec_acc_no
 }
 ```
 
-成功时会在同层追加业务字段；失败时通过 `code` 和 `message` 表示错误。
+成功时会在同层追加业务字段；失败时通过 `code`、`symbol`、`message` 表示错误。
 
 ### 3.1 投资者认证
 
-投资者先调用登录接口，由本系统签发 `auth_token`。后续资金查询、持仓查询、投资者自助改密都使用这个 token。
+投资者先调用：
 
-### 3.2 接口总表
+- `POST /api/external/fund/login`
 
-| 接口名 | 方法 | 路径 | 鉴权 | 请求参数 | 主要响应字段 |
+成功后由本系统签发 `auth_token`。后续资金查询、持仓查询、投资者改密都使用该 token。
+
+### 3.2 外部接口总表
+
+| 接口名 | 方法 | 路径 | 鉴权 | 关键请求字段 | 关键响应字段 |
 |---|---|---|---|---|---|
 | `clientLoginAuth` | `POST` | `/api/external/fund/login` | 无 | `fund_acc_no`, `trade_password` | `auth_token`, `fund_acc_no`, `sec_acc_no`, `status` |
 | `getFundSnapshot` | `GET` | `/api/external/fund/snapshot` | `auth_token` | `fund_acc_no`, `auth_token` | `available_balance`, `frozen_balance`, `currency`, `status`, `recent_logs` |
 | `clientChangeFundPassword` | `PUT` | `/api/external/fund/password` | `auth_token` | `fund_acc_no`, `auth_token`, `password_type`, `old_password`, `new_password` | `code`, `message` |
-| `getSecuritySnapshot` | `GET` | `/api/external/security/snapshot` | `auth_token` | `sec_acc_no`, `auth_token`, `stock_code` 可选 | `sec_acc_no` 以及单只或全持仓数据 |
+| `getSecuritySnapshot` | `GET` | `/api/external/security/snapshot` | `auth_token` | `sec_acc_no`, `auth_token`, `stock_code` 可选 | 单只持仓或全持仓数据 |
 | `updateFundBalance` | `POST` | `/api/external/trade/fund-balance` | 当前未做独立系统签名 | `fund_acc_no`, `ref_order_id`, `txn_type`, `amount` | `available_balance`, `frozen_balance`, `log_id`, `duplicate` |
 | `updateSecurityHolding` | `POST` | `/api/external/trade/security-holding` | 当前未做独立系统签名 | `sec_acc_no`, `stock_code`, `stock_name`, `ref_order_id`, `change_type`, `quantity`, `price` | `log_id`, `duplicate`, `quantity`, `frozen_quantity`, `available_quantity`, `avg_cost` |
 
-### 3.3 外部接口详细语义
+### 3.3 关键外部接口语义
 
 #### `POST /api/external/fund/login`
 
-请求体：
+请求示例：
 
 ```json
 {
@@ -310,13 +327,6 @@ fund_account.sec_acc_no          -> security_account.sec_acc_no
 }
 ```
 
-响应关键字段：
-
-- `auth_token`
-- `fund_acc_no`
-- `sec_acc_no`
-- `status`
-
 #### `GET /api/external/fund/snapshot`
 
 请求参数：
@@ -324,42 +334,14 @@ fund_account.sec_acc_no          -> security_account.sec_acc_no
 - `fund_acc_no`
 - `auth_token`
 
-响应关键字段：
+返回重点：
 
-- `available_balance`
-- `frozen_balance`
-- `currency`
-- `status`
-- `recent_logs`
-
-`recent_logs` 中每条记录字段可能包含：
-
-- `log_id`
-- `txn_type`
-- `amount`
-- `txn_time`
-- `ref_order_id`
-- `stock_code`
-- `stock_name`
-- `holding_change_type`
-- `share_quantity`
-- `price`
-- `holding_quantity_after`
-- `holding_frozen_quantity_after`
+- 资金余额
+- 资金状态
+- 最近资金流水
+- 如果资金流水带 `ref_order_id`，系统会尝试拼上关联持仓变化信息
 
 #### `PUT /api/external/fund/password`
-
-请求体：
-
-```json
-{
-  "fund_acc_no": "FA2026000001",
-  "auth_token": "token",
-  "password_type": "trade",
-  "old_password": "123456",
-  "new_password": "654321"
-}
-```
 
 `password_type` 允许值：
 
@@ -374,35 +356,13 @@ fund_account.sec_acc_no          -> security_account.sec_acc_no
 - `auth_token`
 - `stock_code` 可选
 
-当传 `stock_code` 时，返回单只证券持仓：
-
-- `sec_acc_no`
-- `stock_code`
-- `stock_name`
-- `quantity`
-- `frozen_quantity`
-- `available_quantity`
-- `avg_cost`
-
-当不传 `stock_code` 时，返回：
-
-- `sec_acc_no`
-- `holdings`
-
-其中 `holdings` 中每项包含：
-
-- `stock_code`
-- `stock_name`
-- `quantity`
-- `frozen_quantity`
-- `available_quantity`
-- `avg_cost`
+若带 `stock_code`，返回单只证券持仓；否则返回 `holdings` 数组。
 
 #### `POST /api/external/trade/fund-balance`
 
-接口语义：交易系统告诉账户系统“哪个账户、哪笔订单、什么资金动作、金额多少”，账户系统自己更新余额并写流水。
+语义：交易系统通知资金变化，本系统更新资金账户并写入资金流水。
 
-请求体：
+请求示例：
 
 ```json
 {
@@ -420,18 +380,15 @@ fund_account.sec_acc_no          -> security_account.sec_acc_no
 - `卖出回款`
 - `撤单解冻`
 
-系统行为：
+幂等键：
 
-- 更新 `fund_account.available_balance`
-- 更新 `fund_account.frozen_balance`
-- 写入 `fund_transaction_log`
-- 使用 `ref_order_id + txn_type` 做幂等控制
+- `ref_order_id + txn_type`
 
 #### `POST /api/external/trade/security-holding`
 
-接口语义：交易系统告诉账户系统“哪个证券账户、哪只股票、哪笔订单、什么持仓动作、股数和价格”，账户系统自己更新当前持仓并写持仓变动日志。
+语义：交易系统通知持仓变化，本系统更新当前持仓并写入持仓变动日志。
 
-请求体：
+请求示例：
 
 ```json
 {
@@ -452,22 +409,18 @@ fund_account.sec_acc_no          -> security_account.sec_acc_no
 - `卖出扣减`
 - `撤单释放`
 
-系统行为：
+幂等键：
 
-- 更新 `holding`
-- 写入 `holding_change_log`
-- 使用 `ref_order_id + change_type + sec_acc_no + stock_code` 做幂等控制
+- `ref_order_id + change_type + sec_acc_no + stock_code`
 
-### 3.4 外部接口与交易日志关联
+### 3.4 外部交易与日志关联
 
 资金流水和持仓变化通过 `ref_order_id` 关联。
 
-也就是说，同一笔交易通常会留下两侧事实：
+同一笔交易通常会留下两侧事实：
 
 - `fund_transaction_log.ref_order_id = ORD-...`
 - `holding_change_log.ref_order_id = ORD-...`
-
-查询资金流水时，系统会尝试把同一 `ref_order_id` 对应的持仓变化附带返回，方便对账。
 
 ## 4. 内部接口
 
@@ -483,20 +436,20 @@ fund_account.sec_acc_no          -> security_account.sec_acc_no
 
 - `POST /api/internal/staff/login`
 
-成功后拿到 `auth_token`，后续内部和管理员接口统一在请求头带：
+成功后拿到 `auth_token`，后续内部接口统一通过请求头传：
 
 ```http
 X-Staff-Auth-Token: <token>
 ```
 
-注意：
+说明：
 
-- 请求体里的 `staff_id`、`admin_id`、`operator_id` 只是服务端回填使用
+- 请求体中的 `staff_id`、`operator_staff_id` 最终由服务端回填
 - 服务端真实身份来自 `X-Staff-Auth-Token`
 
 ### 4.2 内部接口总表
 
-| 接口名 | 方法 | 路径 | 鉴权 | 请求参数 | 主要响应字段 |
+| 接口名 | 方法 | 路径 | 鉴权 | 关键请求字段 | 关键响应字段 |
 |---|---|---|---|---|---|
 | `staffLogin` | `POST` | `/api/internal/staff/login` | 无 | `username`, `password` | `staff_id`, `username`, `status`, `auth_token` |
 | `deactivateStaff` | `POST` | `/api/internal/staff/deactivate` | `X-Staff-Auth-Token` | `target_staff_id`, `reason` | `staff_id`, `username`, `status` |
@@ -509,182 +462,66 @@ X-Staff-Auth-Token: <token>
 | `closeFundAccount` | `POST` | `/api/internal/fund/accounts/close` | `X-Staff-Auth-Token` | `fund_acc_no`, `id_number`, `reason` | `status` |
 | `bindSecurityAccount` | `POST` | `/api/internal/fund/accounts/bind` | `X-Staff-Auth-Token` | `fund_acc_no`, `sec_acc_no` | `fund_acc_no`, `sec_acc_no` |
 | `unbindSecurityAccount` | `POST` | `/api/internal/fund/accounts/unbind` | `X-Staff-Auth-Token` | `fund_acc_no`, `sec_acc_no` | `fund_acc_no`, `sec_acc_no` |
-| `queryFundInfo` | `GET` | `/api/internal/fund/accounts` | `X-Staff-Auth-Token` | `fund_acc_no`, `id_number`, `include_logs` 可选 | `fund_acc_no`, `available_balance`, `frozen_balance`, `currency`, `status`, `logs` |
-| `createSecurityAccount` | `POST` | `/api/internal/security/accounts` | `X-Staff-Auth-Token` | `investor_type`, `name`, `gender`, `id_type`, `id_number`, `phone`, `address`, `work_unit`, `occupation`, `education` 及法人代理字段 | `sec_acc_no`, `status`, `investor_id` |
-| `updateInvestorInfo` | `PUT` | `/api/internal/security/investors` | `X-Staff-Auth-Token` | `investor_id`, 可选修改字段如 `name`, `gender`, `id_type`, `id_number`, `phone`, `address`, `work_unit`, `occupation`, `education` 等 | 投资者更新后的信息字段 |
+| `queryFundInfo` | `GET` | `/api/internal/fund/accounts` | `X-Staff-Auth-Token` | `fund_acc_no`, `id_number`, `include_logs` | `fund_acc_no`, `available_balance`, `frozen_balance`, `currency`, `status`, `logs` |
+| `createSecurityAccount` | `POST` | `/api/internal/security/accounts` | `X-Staff-Auth-Token` | `investor_type`, `name`, `gender`, `id_type`, `id_number` 及投资者信息字段 | `sec_acc_no`, `status`, `investor_id` |
+| `updateInvestorInfo` | `PUT` | `/api/internal/security/investors` | `X-Staff-Auth-Token` | `investor_id` 及可修改字段 | 投资者更新后的字段 |
 | `reportSecurityLoss` | `POST` | `/api/internal/security/accounts/loss` | `X-Staff-Auth-Token` | `sec_acc_no`, `id_number`, `reason` | `status` |
 | `reissueSecurityAccount` | `POST` | `/api/internal/security/accounts/reissue` | `X-Staff-Auth-Token` | `old_sec_acc_no`, `id_number` | `new_sec_acc_no`, `old_sec_acc_no` |
 | `closeSecurityAccount` | `POST` | `/api/internal/security/accounts/close` | `X-Staff-Auth-Token` | `sec_acc_no`, `id_number`, `reason` | `status` |
 | `settleAnnualInterest` | `POST` | `/api/admin/fund/settle-annual-interest` | `X-Staff-Auth-Token` | `year_rate` 可选 | `total_accounts`, `total_interest` |
 | `adminFreezeAccount` | `POST` | `/api/admin/accounts/freeze` | `X-Staff-Auth-Token` | `account_type`, `account_no`, `freeze_type`, `reason` | `code`, `message` |
 | `adminUnfreezeAccount` | `POST` | `/api/admin/accounts/unfreeze` | `X-Staff-Auth-Token` | `account_type`, `account_no`, `freeze_type` | `code`, `message` |
-| `adminGetAccountDetails` | `GET` | `/api/admin/accounts/{account_no}` | `X-Staff-Auth-Token` | 路径参数 `account_no` | 账户详情字段 |
+| `adminGetAccountDetails` | `GET` | `/api/admin/accounts/{account_no}` | `X-Staff-Auth-Token` | `account_no` | 账户详情 |
 | `adminCloseSecurityAccount` | `POST` | `/api/admin/security/force-close` | `X-Staff-Auth-Token` | `security_account_no`, `force_reason` | `code`, `message` |
-| `queryOperationLog` | `GET` | `/api/admin/audit/operation-logs` | `X-Staff-Auth-Token` | `staff_id` 可选, `time_from`, `time_to`, `operation_type` 可选, `target_type` 可选, `target_id` 可选 | `logs`, `total` |
+| `queryOperationLog` | `GET` | `/api/admin/audit/operation-logs` | `X-Staff-Auth-Token` | `staff_id`、`time_from`、`time_to`、`operation_type`、`target_type`、`target_id` | `logs`, `total` |
 
-### 4.3 内部接口关键语义
-
-#### 工作人员登录
-
-`POST /api/internal/staff/login`
-
-请求体：
-
-```json
-{
-  "username": "staff01",
-  "password": "staff01pass"
-}
-```
-
-响应关键字段：
-
-- `staff_id`
-- `username`
-- `status`
-- `auth_token`
+### 4.3 当前已实现的关键内部语义
 
 #### 工作人员停用
 
-`POST /api/internal/staff/deactivate`
-
-请求体：
-
-```json
-{
-  "target_staff_id": 2,
-  "reason": "离职"
-}
-```
-
-语义说明：
-
-- 这是逻辑停用，不是物理删除
-- 停用后该工作人员状态改为 `禁用`
-- 该工作人员已有登录 token 会立即失效
-- 会写入 `operation_log`
-
-#### 投资者信息修改
-
-`PUT /api/internal/security/investors`
-
-请求体示例：
-
-```json
-{
-  "investor_id": 1,
-  "name": "张三",
-  "phone": "13800000000",
-  "address": "杭州",
-  "work_unit": "ZJU"
-}
-```
-
-语义说明：
-
-- 允许修改投资者基础资料
-- 如果修改 `id_type` / `id_number`，会重新做证件合法性与唯一性校验
-- 对个人投资者，仍然按当前身份证号实时判断是否成年
-- 系统不单独维护“是否成年”字段
+- 逻辑停用，不做物理删除
+- 停用后原有工作人员 token 立即失效
 - 会写入 `operation_log`
 
 #### 证券开户
 
-`POST /api/internal/security/accounts`
-
-当前实现重点如下：
-
-- 只正式支持个人开户
+- 当前正式支持个人开户
 - 未成年人禁止开户
-- 证件校验当前按 18 位身份证处理
+- 当前证件校验按 18 位身份证处理
 - 黑名单通过外部桥接校验
 - 会创建 `investor` 与 `security_account`
-- 会写 `operation_log`
+- 会写入 `operation_log`
 
 #### 资金开户
 
-`POST /api/internal/fund/accounts`
-
-当前实现重点如下：
-
 - 必须基于已存在证券账户开户
 - 身份证号必须与证券账户持有人一致
-- 资金账户创建后自动与证券账户绑定
-- 若证券账户之前因“无资金账户”被冻结，绑定后自动恢复正常
-- 会写 `operation_log`
+- 创建后自动与证券账户绑定
+- 若证券账户之前因“无资金账户”被冻结，绑定后恢复正常
+- 会写入 `operation_log`
 
 #### 存取款
 
-- `POST /api/internal/fund/deposit`
-- `POST /api/internal/fund/withdraw`
-
-两者都会：
-
 - 修改 `fund_account`
-- 写 `fund_transaction_log`
-- 写 `operation_log`
+- 写入 `fund_transaction_log`
+- 写入 `operation_log`
 
 #### 挂失与补办
 
-证券账户和资金账户都支持挂失、补办。
-
-其中资金账户挂失会联动冻结关联证券账户；补办后会重新绑定新资金账户并失效旧投资者 token。
+- 资金挂失会联动冻结关联证券账户
+- 资金补办会生成新资金账户，并让旧投资者 token 失效
+- 证券补办会复制持仓，并把资金账户重新挂到新证券账户
 
 #### 销户与解绑
 
-当前主要规则：
+- 证券销户前必须无持仓
+- 资金销户前必须无可用余额、无冻结余额
+- 资金解绑或销户后，证券账户进入“无资金账户冻结”
 
-- 证券账户销户前必须无持仓
-- 资金账户销户前必须无可用余额、无冻结余额
-- 资金账户解绑或销户后，证券账户会进入“无资金账户冻结”状态
-- 重新绑定资金账户后，证券账户可恢复正常
+### 4.4 当前未纳入完成范围的接口
 
-#### 管理员接口
-
-管理员接口复用工作人员身份体系，不单独建管理员账户表。
-
-`account_type` 允许值：
-
-- `SECURITY`
-- `FUND`
-
-`freeze_type` 允许值：
-
-- `LOSS`
-- `VIOLATION`
-
-语义说明：
-
-- `LOSS` 冻结不能通过管理员接口直接解冻，必须走挂失补办流程
-- `VIOLATION` 冻结可以通过管理员接口解冻
-
-#### 审计接口
-
-`GET /api/admin/audit/operation-logs`
-
-支持按以下维度过滤：
-
-- `staff_id`
-- `time_from`
-- `time_to`
-- `operation_type`
-- `target_type`
-- `target_id`
-
-返回字段：
-
-- `logs`
-- `total`
-
-其中 `logs` 中每项字段包括：
-
-- `log_id`
-- `staff_id`
-- `operation_type`
-- `target_type`
-- `target_id`
-- `detail`
-- `operation_time`
+- `AdminController` 与 `AuditController` 所对应能力当前不作为“已完成联调范围”
+- 代码保留，但本次后端验收主范围是账户业务主流程
 
 ## 5. 错误码
 
@@ -702,18 +539,18 @@ X-Staff-Auth-Token: <token>
 | `1003` | `ERR_003` | 账户已冻结 |
 | `1004` | `ERR_004` | 密码错误 |
 | `1005` | `ERR_005` | 证券账户不存在 |
-| `1006` | `ERR_006` | 该投资者已拥有其他证券账户 |
-| `1007` | `ERR_007` | 资金账户尚有可用余额或冻结资金，当前操作不允许 |
+| `1006` | `ERR_006` | 该投资者已有其他证券账户 |
+| `1007` | `ERR_007` | 资金账户仍有余额或冻结资金，不允许当前操作 |
 | `1008` | `ERR_008` | 证券账户未关联当前资金账户 |
 | `1009` | `ERR_009` | 工作人员认证失败 |
 | `1010` | `ERR_010` | 账户不存在 |
-| `1011` | `ERR_011` | 账户已是请求的状态 |
+| `1011` | `ERR_011` | 账户已是请求状态 |
 | `1012` | `ERR_012` | 投资者在黑名单中 |
-| `1013` | `ERR_013` | 证券账户持有人与投资者身份证不一致 |
-| `1014` | `ERR_014` | 账户绑定关系冲突 |
+| `1013` | `ERR_013` | 账户持有人与证件不一致 |
+| `1014` | `ERR_014` | 绑定关系冲突 |
 | `1015` | `ERR_015` | 资金账户未绑定符合要求的证券账户 |
 | `1016` | `ERR_016` | 资金账户存在未成交委托单 |
-| `1017` | `ERR_017` | 资金账户处于冻结状态，当前操作不允许 |
+| `1017` | `ERR_017` | 资金账户处于冻结状态，不允许当前操作 |
 | `1018` | `ERR_018` | 认证令牌无效或已失效 |
 | `1019` | `ERR_019` | 开户资格不符合 |
 | `1020` | `ERR_020` | 证件类型或证件号码不合法 |
@@ -722,11 +559,9 @@ X-Staff-Auth-Token: <token>
 | `4000` | `ERR_PARAM` | 参数校验失败 |
 | `5000` | `ERR_SYS` | 系统内部错误 |
 
-### 5.2 使用说明
+### 5.2 常见映射
 
-主要分工如下：
-
-- `ERR_001`：资金不足、冻结资金不足
+- `ERR_001`：可用余额不足、冻结资金不足
 - `ERR_002`：可卖持仓不足、冻结持仓不足
 - `ERR_003`：账户被冻结，禁止继续操作
 - `ERR_004`：交易密码或取款密码错误
@@ -735,28 +570,95 @@ X-Staff-Auth-Token: <token>
 - `ERR_014` / `ERR_015`：绑定关系不满足
 - `ERR_018`：投资者或工作人员 token 失效
 - `ERR_019`：开户资格不满足，例如未成年人
-- `ERR_020`：身份证件类型或号码不合法
-- `ERR_021`：账户状态冲突，例如已销户、非挂失状态下补办、管理员解冻场景不匹配
+- `ERR_020`：证件类型或号码不合法
+- `ERR_021`：账户状态冲突，例如已销户、非挂失状态补办
 - `ERR_022`：证券账户仍有持仓，不能销户
 
-### 5.3 当前遗留点
+### 5.3 当前说明
 
 - `ERR_008` 当前基本未实际使用
 - `ERR_016` 当前基本未实际使用，因为本系统未单独维护“未成交委托单”表
-- `ERR_013` 仍同时覆盖“投资者不存在”和“持有人身份不匹配”两类场景
+- `ERR_013` 同时覆盖“投资者不存在”和“持有人身份不匹配”两类场景
 
-## 6. 运行与校验
+## 6. 测试
 
-常用命令：
+### 6.1 测试范围
+
+当前测试覆盖以下层次：
+
+- DAO 层
+- Service 层
+- HTTP 接口层
+- 黑名单桥接
+- 真实 MySQL 集成测试
+
+### 6.2 已覆盖的主要业务场景
+
+- 证券开户、资金开户
+- 投资者信息修改
+- 存款、取款、内部改密、外部改密
+- 投资者登录与 token 鉴权
+- 资金快照、持仓快照、资金信息查询
+- 资金挂失、资金补办、证券挂失、证券补办
+- 资金销户、绑定、解绑
+- 外部交易回调：资金变化、持仓变化
+- 幂等：重复回调不会重复落账
+- 工作人员停用及 token 失效
+- 未成年人开户失败
+- 错误密码、非法参数、无效 token
+- SQL 注入载荷
+- XSS 载荷
+
+### 6.3 测试文件说明
+
+- `DaoIntegrationTest`：验证 DAO 增删改查、事务回滚、日志查询
+- `AccountWorkflowServiceTest`：验证核心业务流程和并发幂等
+- `AccountBusinessRuleTest`：验证业务规则与状态流转
+- `ClientAuthTokenServiceTest`：验证投资者 token 签发、校验、失效
+- `FundLogViewCompositionTest`：验证资金流水与持仓日志拼装
+- `ApiIntegrationTest`：H2 + MockMvc 下的接口主流程与异常流程
+- `BlacklistSupportTest`：验证黑名单 HTTP 桥接
+- `RealMySqlIntegrationTest`：真实 MySQL 下的主流程、异常流程、注入/XSS、状态流转、幂等
+
+### 6.4 测试命令
+
+本地全量测试：
 
 ```bash
-mvn test
+mvn clean test
 ```
 
-当前状态：
+仅跑真实 MySQL 集成测试：
 
-- `sourcecode/` 已移除
-- 外部接口与内部接口已分开
-- 工作人员鉴权已接入
-- 投资者鉴权已接入
-- 资金流水与持仓变动日志已通过 `ref_order_id` 关联
+```bash
+mvn -Dtest=RealMySqlIntegrationTest test
+```
+
+### 6.5 真实 MySQL 测试说明
+
+真实 MySQL 测试默认使用：
+
+- Host：`localhost`
+- Port：`3306`
+- Username：`root`
+- Password：`mutsumiZZL520!`
+
+说明：
+
+- 每个真实 MySQL 测试方法会创建独立测试库，避免互相删库冲突
+- 真实测试已实际跑通
+- 真实测试过程中修复过一个真实约束问题：证券账户补办时 `linked_fund_acc` 唯一约束冲突
+
+### 6.6 当前结论
+
+当前后端范围内，以下结论已经确认：
+
+- `mvn -q clean test` 通过
+- 真实 MySQL 集成测试通过
+- 主体后端逻辑可进入联调阶段
+
+当前不在这次“彻底完成”范围内的内容：
+
+- 前端联调
+- 与其他组真实系统联调
+- `Admin` / `Audit` 的正式交付验收

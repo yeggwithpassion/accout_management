@@ -5,7 +5,7 @@ import account.common.Result;
 import account.common.ResultPayloadMapper;
 import account.dto.ClientChangeFundPasswordRequest;
 import account.dto.ClientLoginAuthRequest;
-import account.service.FundAccountService;
+import account.service.api.FundAccountService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import lombok.RequiredArgsConstructor;

@@ -3,7 +3,7 @@ package account.controller.external;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import account.common.Result;
 import account.common.ResultPayloadMapper;
-import account.service.SecurityAccountService;
+import account.service.api.SecurityAccountService;
 import jakarta.validation.constraints.NotBlank;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

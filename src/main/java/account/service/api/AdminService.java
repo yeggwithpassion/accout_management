@@ -1,4 +1,4 @@
-package account.service;
+package account.service.api;
 
 import account.dto.AdminCloseSecurityAccountRequest;
 import account.dto.AdminFreezeRequest;

@@ -26,6 +26,8 @@ import account.dto.UpdateFundBalanceRequest;
 import account.dto.WithdrawRequest;
 import account.enums.AccountStatus;
 import account.integration.BlacklistClient;
+import account.service.api.ClientAuthTokenService;
+import account.service.api.FundAccountService;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -268,6 +270,7 @@ public class FundAccountServiceImpl implements FundAccountService {
             }
 
             String newFundAccNo = AccountNumberGenerator.generateFundAccountNo();
+            dao.fundAccountDao().relinkSecurityAccount(connection, request.getOldFundAccNo(), null);
             dao.fundAccountDao().create(connection, new DomainModels.FundAccount(
                     newFundAccNo,
                     oldAccount.secAccNo(),
