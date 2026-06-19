@@ -502,7 +502,7 @@ X-Staff-Auth-Token: <token>
 - 必须基于已存在证券账户开户
 - 身份证号必须与证券账户持有人一致
 - 创建后自动与证券账户绑定
-- 若证券账户之前因“无资金账户”被冻结，绑定后恢复正常
+- 若证券账户之前因"无资金账户"被冻结，绑定后恢复正常
 - 会写入 `operation_log`
 
 #### 存取款
@@ -521,11 +521,11 @@ X-Staff-Auth-Token: <token>
 
 - 证券销户前必须无持仓
 - 资金销户前必须无可用余额、无冻结余额
-- 资金解绑或销户后，证券账户进入“无资金账户冻结”
+- 资金解绑或销户后，证券账户进入"无资金账户冻结"
 
 ### 4.4 当前未纳入完成范围的接口
 
-- `AdminController` 与 `AuditController` 所对应能力当前不作为“已完成联调范围”
+- `AdminController` 与 `AuditController` 所对应能力当前不作为"已完成联调范围"
 - 代码保留，但本次后端验收主范围是账户业务主流程
 
 ## 5. 错误码
@@ -582,8 +582,8 @@ X-Staff-Auth-Token: <token>
 ### 5.3 当前说明
 
 - `ERR_008` 当前基本未实际使用
-- `ERR_016` 当前基本未实际使用，因为本系统未单独维护“未成交委托单”表
-- `ERR_013` 同时覆盖“投资者不存在”和“持有人身份不匹配”两类场景
+- `ERR_016` 当前基本未实际使用，因为本系统未单独维护"未成交委托单"表
+- `ERR_013` 同时覆盖"投资者不存在"和"持有人身份不匹配"两类场景
 
 ## 6. 测试
 
@@ -670,8 +670,174 @@ mvn -Dtest=RealMySqlIntegrationTest ^
 - 真实 MySQL 集成测试通过
 - 主体后端逻辑可进入联调阶段
 
-当前不在这次“彻底完成”范围内的内容：
+当前不在这次"彻底完成"范围内的内容：
 
 - 前端联调
 - 与其他组真实系统联调
 - `Admin` / `Audit` 的正式交付验收
+
+## 7. 前端部分
+
+前端代码位于 `frontend/` 目录，是一个基于 React + TypeScript + Vite 的 SPA 应用。
+
+### 7.1 前端结构
+
+```
+frontend/
+├── src/
+│   ├── app/
+│   │   ├── components/ui/     # UI组件库
+│   │   ├── pages/             # 页面组件
+│   │   │   ├── Dashboard.tsx       # 管理员仪表盘
+│   │   │   ├── FundAccounts.tsx    # 资金账户管理
+│   │   │   ├── SecuritiesAccounts.tsx  # 证券账户管理
+│   │   │   ├── Login.tsx           # 登录页面
+│   │   │   └── user/               # 用户端页面
+│   │   │       ├── UserDashboard.tsx   # 用户仪表盘
+│   │   │       ├── Trade.tsx           # 交易页面
+│   │   │       ├── Market.tsx          # 行情页面
+│   │   │       └── Transfer.tsx        # 银证转账
+│   │   ├── lib/
+│   │   │   └── api.ts         # API封装，对接Java后端
+│   │   └── routes.tsx         # 路由配置
+│   └── styles/                # 样式文件
+├── index.html
+├── package.json
+└── vite.config.ts
+```
+
+### 7.2 前端与后端的对接
+
+前端 `api.ts` 已配置对接本Java后端：
+
+- **API_BASE**: `http://localhost:8080/api` - 账户业务子系统
+- **TRADE_MANAGEMENT_API_BASE**: `http://localhost:8081/api/trade-management` - 交易管理系统（黑名单服务）
+
+#### 7.2.1 外部接口（投资者端）
+
+| 功能 | 前端方法 | 后端接口 |
+|------|---------|---------|
+| 登录 | `userLogin()` | `POST /api/external/fund/login` |
+| 资金查询 | `getFundSnapshot()` | `GET /api/external/fund/snapshot` |
+| 持仓查询 | `getSecuritySnapshot()` | `GET /api/external/security/snapshot` |
+| 修改密码 | `changePassword()` | `PUT /api/external/fund/password` |
+
+#### 7.2.2 内部接口（柜台端）
+
+| 功能 | 前端方法 | 后端接口 |
+|------|---------|---------|
+| 员工登录 | `adminLogin()` | `POST /api/internal/staff/login` |
+| 证券开户 | `createSecuritiesAccount()` | `POST /api/internal/security/accounts` |
+| 资金开户 | `createFundAccount()` | `POST /api/internal/fund/accounts` |
+| 存款 | `deposit()` | `POST /api/internal/fund/deposit` |
+| 取款 | `withdraw()` | `POST /api/internal/fund/withdraw` |
+| 挂失/补办/销户 | 对应方法 | 对应接口 |
+
+#### 7.2.3 黑名单检查（六号接口）
+
+开户时前端会调用黑名单服务进行校验：
+
+```typescript
+// 资金账户开户时检查
+const isBlacklisted = await api.checkBlacklist(userName);
+if (isBlacklisted) {
+  // 拦截开户，提示用户已在黑名单
+}
+```
+
+- **接口**: `GET /api/trade-management/blacklist/check?userName={userName}`
+- **用途**: 证券开户、资金开户前检查用户是否在黑名单中
+- **前端位置**: `FundAccounts.tsx` 和 `SecuritiesAccounts.tsx`
+
+### 7.3 认证机制
+
+#### 投资者端（auth_token）
+1. 登录成功后，后端返回 `auth_token`
+2. 前端保存到 `localStorage`
+3. 后续请求通过 URL 参数传递 `auth_token`
+
+#### 柜台端（X-Staff-Auth-Token）
+1. 登录成功后，后端返回 `staff_auth_token`
+2. 前端保存到 `localStorage`
+3. 后续请求通过 HTTP Header `staff_auth_token` 传递
+
+## 8. 使用方法
+
+### 8.1 启动后端服务
+
+```bash
+# 1. 确保MySQL已启动，并创建数据库
+
+# 2. 执行数据库脚本
+mysql -u your_username -p account_db < scripts/01_create_tables.sql
+mysql -u your_username -p account_db < scripts/02_views.sql
+mysql -u your_username -p account_db < scripts/03_test_data.sql
+
+# 3. 配置数据库连接
+# 编辑 src/main/resources/application.yml
+# 或设置环境变量 ACCOUNT_DB_USERNAME 和 ACCOUNT_DB_PASSWORD
+
+# 4. 启动Spring Boot应用
+mvn spring-boot:run
+# 或使用IDEA运行 AccountManagementApplication
+```
+
+后端服务默认监听 `http://localhost:8080`
+
+### 8.2 启动前端
+
+```bash
+cd frontend
+
+# 安装依赖
+npm install
+
+# 启动开发服务器
+npm run dev
+```
+
+前端开发服务器默认监听 `http://localhost:5173`
+
+### 8.3 启动黑名单服务
+
+确保交易管理系统的黑名单服务已启动，默认监听 `http://localhost:8081`
+
+### 8.4 访问系统
+
+#### 投资者端（用户交易端）
+- 地址: `http://localhost:5173/login`
+- 测试账户: 使用数据库中预置的资金账户和密码登录
+
+#### 柜台端（管理员后台）
+- 地址: `http://localhost:5173/login`
+- 切换至"管理端"标签
+- 测试员工: 使用数据库中预置的员工账号和密码登录
+
+### 8.5 完整启动流程示例
+
+```bash
+# 终端1：启动MySQL（如果未启动）
+# ...
+
+# 终端2：启动Java后端
+cd accout_management
+mvn spring-boot:run
+
+# 终端3：启动黑名单服务（交易管理系统）
+# cd trade-management
+# ./start.sh 或对应启动命令
+
+# 终端4：启动前端
+cd accout_management/frontend
+npm install
+npm run dev
+
+# 访问 http://localhost:5173
+```
+
+### 8.6 注意事项
+
+1. **跨域问题**: 后端已配置CORS，允许前端跨域访问
+2. **端口冲突**: 确保8080（后端）、5173（前端）、8081（黑名单服务）端口未被占用
+3. **数据库连接**: 确保MySQL连接信息正确配置
+4. **黑名单服务**: 开户功能依赖黑名单服务，需确保该服务已启动

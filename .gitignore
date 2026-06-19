@@ -21,3 +21,6 @@ Thumbs.db
 # Logs
 *.log
 sourcecode/target/
+
+# frontend
+frontend/node_modules
