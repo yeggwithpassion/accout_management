@@ -1,4 +1,4 @@
-USE stock_account_system;
+USE account_db;
 
 SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
@@ -54,12 +54,12 @@ END
 WHERE sec_acc_no IN ('SA2026000001', 'SA2026000002', 'SA2026000003');
 
 INSERT INTO holding (
-    holding_id, sec_acc_no, stock_code, quantity, frozen_quantity, avg_cost
+    holding_id, sec_acc_no, stock_code, stock_name, quantity, frozen_quantity, avg_cost
 ) VALUES
-    (1, 'SA2026000001', '600519', 200, 50, 1680.5000),
-    (2, 'SA2026000001', '000001', 1000, 0, 11.2300),
-    (3, 'SA2026000002', '600036', 800, 100, 41.8800),
-    (4, 'SA2026000003', '300750', 500, 0, 186.4500);
+    (1, 'SA2026000001', '600519', '贵州茅台', 200, 50, 1680.5000),
+    (2, 'SA2026000001', '000001', '平安银行', 1000, 0, 11.2300),
+    (3, 'SA2026000002', '600036', '招商银行', 800, 100, 41.8800),
+    (4, 'SA2026000003', '300750', '宁德时代', 500, 0, 186.4500);
 
 INSERT INTO fund_transaction_log (
     log_id, fund_acc_no, txn_type, amount, available_after, frozen_after, ref_order_id, operator_id, txn_time

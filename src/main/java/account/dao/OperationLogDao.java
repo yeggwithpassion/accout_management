@@ -96,6 +96,14 @@ public final class OperationLogDao extends BaseJdbcDao {
         ).isPresent();
     }
 
+    public List<OperationLog> listRecent(int limit) {
+        return executor.queryList(
+                SELECT_COLUMNS + " order by operation_time desc, log_id desc limit ?",
+                statement -> statement.setInt(1, limit),
+                LOG_MAPPER
+        );
+    }
+
     private void bindParameters(java.sql.PreparedStatement statement, List<Object> parameters) throws java.sql.SQLException {
         for (int index = 0; index < parameters.size(); index++) {
             statement.setObject(index + 1, parameters.get(index));

@@ -1,4 +1,4 @@
-import { Outlet, NavLink } from "react-router";
+import { Outlet, NavLink, useNavigate } from "react-router";
 import { 
   Building2, 
   Wallet, 
@@ -9,9 +9,16 @@ import {
   Bell
 } from "lucide-react";
 import { useState } from "react";
+import { api } from "../lib/api";
 
 export function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    api.clearToken();
+    navigate("/login");
+  };
 
   const navigation = [
     { name: '总览 Dashboard', href: '/', icon: LayoutDashboard, end: true },
@@ -62,7 +69,10 @@ export function Layout() {
             <Settings className="w-5 h-5 flex-shrink-0" />
             {sidebarOpen && <span>系统设置</span>}
           </button>
-          <button className="flex items-center gap-3 px-3 py-2 w-full text-left rounded-md text-red-200 hover:bg-red-800 hover:text-white transition-colors mt-1">
+          <button 
+            onClick={handleLogout}
+            className="flex items-center gap-3 px-3 py-2 w-full text-left rounded-md text-red-200 hover:bg-red-800 hover:text-white transition-colors mt-1"
+          >
             <LogOut className="w-5 h-5 flex-shrink-0" />
             {sidebarOpen && <span>退出登录</span>}
           </button>

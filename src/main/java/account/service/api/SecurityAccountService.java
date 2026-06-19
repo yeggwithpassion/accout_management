@@ -7,11 +7,13 @@ import account.dto.InvestorInfoResponse;
 import account.dto.ReissueSecurityAccountRequest;
 import account.dto.ReportSecurityLossRequest;
 import account.dto.SecurityAccountCreatedResponse;
+import account.dto.SecurityAccountListItemResponse;
 import account.dto.SecurityHoldingUpdateResponse;
 import account.dto.SecurityReissueResponse;
 import account.dto.UpdateSecurityHoldingRequest;
 import account.dto.SecuritySnapshotResponse;
 import account.dto.UpdateInvestorInfoRequest;
+import java.util.List;
 
 public interface SecurityAccountService {
 
@@ -28,4 +30,6 @@ public interface SecurityAccountService {
     AccountStatusResponse closeSecurityAccount(CloseSecurityAccountRequest request);
 
     InvestorInfoResponse updateInvestorInfo(UpdateInvestorInfoRequest request);
+
+    List<SecurityAccountListItemResponse> listAllSecurityAccounts();
 }

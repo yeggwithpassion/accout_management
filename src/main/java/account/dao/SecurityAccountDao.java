@@ -64,6 +64,14 @@ public final class SecurityAccountDao extends BaseJdbcDao {
         );
     }
 
+    public List<SecurityAccount> listAll() {
+        return executor.queryList(
+                SELECT_COLUMNS + " order by open_date desc, sec_acc_no desc",
+                statement -> {},
+                SECURITY_ACCOUNT_MAPPER
+        );
+    }
+
     public boolean create(Connection connection, SecurityAccount account) {
         String sql = """
                 insert into security_account (sec_acc_no, investor_id, status, open_date, linked_fund_acc)

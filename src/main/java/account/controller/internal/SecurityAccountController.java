@@ -14,12 +14,15 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 @Slf4j
 @RestController
@@ -78,6 +81,14 @@ public class SecurityAccountController {
         request.setStaffId(requireStaffId(authToken));
         log.info("[updateInvestorInfo] investor_id={} staff_id={}", request.getInvestorId(), request.getStaffId());
         return ResultPayloadMapper.flatten(objectMapper, securityAccountService.updateInvestorInfo(request), "更新成功");
+    }
+
+    @GetMapping("/accounts")
+    public Result<List> listAllSecurityAccounts(
+            @RequestHeader(AuthHeaders.STAFF_AUTH_TOKEN) String authToken) {
+        Integer staffId = requireStaffId(authToken);
+        log.info("[listAllSecurityAccounts] staff_id={}", staffId);
+        return Result.success(securityAccountService.listAllSecurityAccounts());
     }
 
     private Integer requireStaffId(String authToken) {

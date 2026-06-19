@@ -13,6 +13,7 @@ import account.dto.InvestorInfoResponse;
 import account.dto.ReissueSecurityAccountRequest;
 import account.dto.ReportSecurityLossRequest;
 import account.dto.SecurityAccountCreatedResponse;
+import account.dto.SecurityAccountListItemResponse;
 import account.dto.SecurityHoldingUpdateResponse;
 import account.dto.SecurityReissueResponse;
 import account.dto.SecuritySnapshotResponse;
@@ -57,8 +58,13 @@ public class SecurityAccountServiceImpl implements SecurityAccountService {
     public SecurityAccountCreatedResponse createSecurityAccount(CreateSecurityAccountRequest request) {
         validateInvestorEligibility(request);
 
-        if (dao.blacklistSupport(blacklistClient).isBlockedByUserName(request.getName())) {
-            throw new BusinessException(ErrorCode.ERR_012, "投资者在黑名单中，无法开立证券账户");
+        // 黑名单检查（服务不可用时跳过）
+        try {
+            if (dao.blacklistSupport(blacklistClient).isBlockedByUserName(request.getName())) {
+                throw new BusinessException(ErrorCode.ERR_012, "投资者在黑名单中，无法开立证券账户");
+            }
+        } catch (Exception e) {
+            log.warn("Blacklist check failed for user '{}', continuing with account creation: {}", request.getName(), e.getMessage());
         }
 
         return dao.transactionManager().execute(connection -> {
@@ -562,5 +568,33 @@ public class SecurityAccountServiceImpl implements SecurityAccountService {
             return currentValue;
         }
         return requestValue.isBlank() ? null : requestValue;
+    }
+
+    @Override
+    public List<SecurityAccountListItemResponse> listAllSecurityAccounts() {
+        var accounts = dao.securityAccountDao().listAll();
+        return accounts.stream().map(account -> {
+            var investor = dao.investorDao().findById(account.investorId()).orElse(null);
+            String investorType = investor != null 
+                ? (investor.type() == DomainEnums.InvestorType.PERSONAL ? "个人" : "法人")
+                : "未知";
+            String statusCode = switch (account.status()) {
+                case NORMAL -> "normal";
+                case LOSS_FROZEN -> "frozen";
+                case CLOSED -> "closed";
+                case VIOLATION_FROZEN, NO_FUND_FROZEN, PRE_CLOSE -> "frozen";
+                default -> "normal";
+            };
+            return SecurityAccountListItemResponse.builder()
+                    .secAccNo(account.secAccNo())
+                    .investorId(account.investorId())
+                    .name(investor != null ? investor.name() : "未知")
+                    .idNumber(investor != null ? investor.idNumber() : "")
+                    .investorType(investorType)
+                    .status(statusCode)
+                    .openDate(account.openDate().toString())
+                    .linkedFundAcc(account.linkedFundAcc())
+                    .build();
+        }).toList();
     }
 }

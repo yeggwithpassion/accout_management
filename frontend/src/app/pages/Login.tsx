@@ -27,8 +27,8 @@ export default function Login() {
         }
       } else {
         const result = await api.adminLogin(accountNo, password);
-        // Java后端返回: staff_auth_token
-        if (result.staff_auth_token) {
+        // Java后端返回: auth_token
+        if (result.auth_token) {
           navigate("/");
         } else {
           throw new Error("登录失败，未获取到认证令牌");

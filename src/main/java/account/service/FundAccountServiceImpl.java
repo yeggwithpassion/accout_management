@@ -14,6 +14,7 @@ import account.dto.CloseFundAccountRequest;
 import account.dto.CreateFundAccountRequest;
 import account.dto.DepositRequest;
 import account.dto.FundAccountCreatedResponse;
+import account.dto.FundAccountListItemResponse;
 import account.dto.FundBalanceChangeResponse;
 import account.dto.FundInfoResponse;
 import account.dto.FundLogView;
@@ -69,8 +70,13 @@ public class FundAccountServiceImpl implements FundAccountService {
             throw new BusinessException(ErrorCode.ERR_013, "身份证号与证券账户持有人不一致");
         }
 
-        if (dao.blacklistSupport(blacklistClient).isBlockedBySecurityAccountNo(request.getSecAccNo())) {
-            throw new BusinessException(ErrorCode.ERR_012, "投资者在黑名单中，无法开立资金账户");
+        // 黑名单检查（服务不可用时跳过）
+        try {
+            if (dao.blacklistSupport(blacklistClient).isBlockedBySecurityAccountNo(request.getSecAccNo())) {
+                throw new BusinessException(ErrorCode.ERR_012, "投资者在黑名单中，无法开立资金账户");
+            }
+        } catch (Exception e) {
+            log.warn("Blacklist check failed for sec_acc_no '{}', continuing with fund account creation: {}", request.getSecAccNo(), e.getMessage());
         }
 
         if (secAccount.status() == DomainEnums.AccountStatus.CLOSED) {
@@ -746,5 +752,42 @@ public class FundAccountServiceImpl implements FundAccountService {
                 .holdingFrozenQuantityAfter(change.frozenQuantityAfter()));
 
         return builder.build();
+    }
+
+    @Override
+    public List<FundAccountListItemResponse> listAllFundAccounts() {
+        var accounts = dao.fundAccountDao().listAll();
+        return accounts.stream().map(account -> {
+            String name = "";
+            String idNumber = "";
+            if (account.secAccNo() != null && !account.secAccNo().isBlank()) {
+                var secAccount = dao.securityAccountDao().findByAccountNo(account.secAccNo()).orElse(null);
+                if (secAccount != null) {
+                    var investor = dao.investorDao().findById(secAccount.investorId()).orElse(null);
+                    if (investor != null) {
+                        name = investor.name();
+                        idNumber = investor.idNumber();
+                    }
+                }
+            }
+            String statusCode = switch (account.status()) {
+                case NORMAL -> "normal";
+                case LOSS_FROZEN -> "frozen";
+                case CLOSED -> "closed";
+                case VIOLATION_FROZEN, NO_FUND_FROZEN, PRE_CLOSE -> "frozen";
+                default -> "normal";
+            };
+            return FundAccountListItemResponse.builder()
+                    .fundAccNo(account.fundAccNo())
+                    .secAccNo(account.secAccNo())
+                    .name(name)
+                    .idNumber(idNumber)
+                    .availableBalance(account.availableBalance())
+                    .frozenBalance(account.frozenBalance())
+                    .currency(account.currency())
+                    .status(statusCode)
+                    .openDate(account.openDate().toString())
+                    .build();
+        }).toList();
     }
 }

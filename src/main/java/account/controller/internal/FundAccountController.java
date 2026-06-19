@@ -16,6 +16,7 @@ import account.service.api.FundAccountService;
 import account.service.api.StaffAuthTokenService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.validation.annotation.Validated;
@@ -151,6 +152,14 @@ public class FundAccountController {
                 fundAccountService.queryFundInfo(fundAccNo, idNumber, includeLogs, staffId),
                 "查询成功"
         );
+    }
+
+    @GetMapping("/accounts/list")
+    public Result<List> listAllFundAccounts(
+            @RequestHeader(AuthHeaders.STAFF_AUTH_TOKEN) String authToken) {
+        Integer staffId = requireStaffId(authToken);
+        log.info("[listAllFundAccounts] staff_id={}", staffId);
+        return Result.success(fundAccountService.listAllFundAccounts());
     }
 
     private Integer requireStaffId(String authToken) {

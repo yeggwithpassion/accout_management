@@ -72,6 +72,14 @@ public final class FundAccountDao extends BaseJdbcDao {
         }, FUND_ACCOUNT_MAPPER);
     }
 
+    public List<FundAccount> listAll() {
+        return executor.queryList(
+                SELECT_COLUMNS + " order by open_date desc, fund_acc_no desc",
+                statement -> {},
+                FUND_ACCOUNT_MAPPER
+        );
+    }
+
     public boolean create(Connection connection, FundAccount account) {
         String sql = """
                 insert into fund_account (

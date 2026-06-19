@@ -40,13 +40,13 @@ class ApiClient {
     };
     
     if (isStaff) {
-      // 管理员使用 staff_auth_token
+      // 管理员使用 X-Staff-Auth-Token
       const token = this.getToken();
       if (token) {
-        headers['staff_auth_token'] = token;
+        headers['X-Staff-Auth-Token'] = token;
       }
     } else {
-      // 用户端不使用Authorization header，而是在请求参数中传递auth_token
+      //
     }
     
     return headers;
@@ -106,9 +106,9 @@ class ApiClient {
       body: JSON.stringify({ username, password }),
     });
     
-    // 保存staff_auth_token
-    if (data.staff_auth_token) {
-      this.setToken(data.staff_auth_token);
+    // 保存staff_auth_token (后端返回的是 auth_token)
+    if (data.auth_token) {
+      this.setToken(data.auth_token);
     }
     
     return data;
@@ -155,6 +155,11 @@ class ApiClient {
   }
 
   // ==================== Admin - Fund Account (Internal API) ====================
+
+  // 获取资金账户列表 - GET /api/internal/fund/accounts/list
+  async listFundAccounts() {
+    return this.request('/internal/fund/accounts/list', {}, true);
+  }
 
   // 查询资金账户信息 - GET /api/internal/fund/accounts
   async queryFundInfo(fundAccNo: string, idNumber: string, includeLogs: boolean = false) {
@@ -218,10 +223,16 @@ class ApiClient {
   }
 
   // 补办资金账户 - POST /api/internal/fund/accounts/reissue
-  async reissueFundAccount(oldFundAccNo: string, reason: string, idNumber: string) {
+  async reissueFundAccount(oldFundAccNo: string, reason: string, idNumber: string, newTradePassword: string, newWithdrawPassword: string) {
     return this.request('/internal/fund/accounts/reissue', {
       method: 'POST',
-      body: JSON.stringify({ old_fund_acc_no: oldFundAccNo, reason, id_number: idNumber }),
+      body: JSON.stringify({ 
+        old_fund_acc_no: oldFundAccNo, 
+        reason, 
+        id_number: idNumber,
+        new_trade_password: newTradePassword,
+        new_withdraw_password: newWithdrawPassword
+      }),
     }, true);
   }
 
@@ -251,6 +262,11 @@ class ApiClient {
 
   // ==================== Admin - Security Account (Internal API) ====================
 
+  // 获取证券账户列表 - GET /api/internal/security/accounts
+  async listSecurityAccounts() {
+    return this.request('/internal/security/accounts', {}, true);
+  }
+
   // 开设证券账户 - POST /api/internal/security/accounts
   async createSecuritiesAccount(data: {
     id_number: string;
@@ -272,26 +288,26 @@ class ApiClient {
   }
 
   // 挂失证券账户 - POST /api/internal/security/accounts/loss
-  async reportSecurityLoss(secAccNo: string, reason: string) {
+  async reportSecurityLoss(secAccNo: string, reason: string, idNumber: string) {
     return this.request('/internal/security/accounts/loss', {
       method: 'POST',
-      body: JSON.stringify({ sec_acc_no: secAccNo, reason }),
+      body: JSON.stringify({ sec_acc_no: secAccNo, reason, id_number: idNumber }),
     }, true);
   }
 
   // 补办证券账户 - POST /api/internal/security/accounts/reissue
-  async reissueSecurityAccount(oldSecAccNo: string, reason: string) {
+  async reissueSecurityAccount(oldSecAccNo: string, reason: string, idNumber: string) {
     return this.request('/internal/security/accounts/reissue', {
       method: 'POST',
-      body: JSON.stringify({ old_sec_acc_no: oldSecAccNo, reason }),
+      body: JSON.stringify({ old_sec_acc_no: oldSecAccNo, reason, id_number: idNumber }),
     }, true);
   }
 
   // 销户证券账户 - POST /api/internal/security/accounts/close
-  async closeSecurityAccount(secAccNo: string, reason: string) {
+  async closeSecurityAccount(secAccNo: string, reason: string, idNumber: string) {
     return this.request('/internal/security/accounts/close', {
       method: 'POST',
-      body: JSON.stringify({ sec_acc_no: secAccNo, reason }),
+      body: JSON.stringify({ sec_acc_no: secAccNo, reason, id_number: idNumber }),
     }, true);
   }
 
@@ -318,6 +334,18 @@ class ApiClient {
   // 查询操作日志 - GET /api/internal/audit/logs
   async getOperationLogs(page = 1, limit = 50) {
     return this.request(`/internal/audit/logs?page=${page}&limit=${limit}`, {}, true);
+  }
+
+  // ==================== Dashboard (Internal API) ====================
+
+  // 获取Dashboard统计数据 - GET /api/internal/dashboard/stats
+  async getDashboardStats() {
+    return this.request('/internal/dashboard/stats', {}, true);
+  }
+
+  // 获取最近操作日志 - GET /api/internal/dashboard/recent-logs
+  async getRecentLogs(limit = 10) {
+    return this.request(`/internal/dashboard/recent-logs?limit=${limit}`, {}, true);
   }
 
   // ==================== Blacklist API (External - Trade Management System) ====================

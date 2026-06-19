@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Plus, Search, AlertCircle, RefreshCw, XCircle } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -8,21 +8,54 @@ import { Label } from "../components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { api } from "../lib/api";
 
-// Mock Data
-const MOCK_ACCOUNTS = [
-  { id: "A10023491", type: "individual", name: "张三", idNumber: "110105199001012345", status: "normal", openDate: "2023-05-12" },
-  { id: "B99823101", type: "corporate", name: "北京某某科技有限公司", idNumber: "91110000X123456789", status: "normal", openDate: "2022-11-20" },
-  { id: "A10099823", type: "individual", name: "李四", idNumber: "310104198502124567", status: "frozen", openDate: "2024-01-15" },
-  { id: "C33219088", type: "individual", name: "王五（涉案）", idNumber: "21020419780912334X", status: "blacklisted", openDate: "2021-03-05" },
-];
+interface SecurityAccount {
+  sec_acc_no: string;
+  investor_id: number;
+  name: string;
+  id_number: string;
+  investor_type: string;
+  status: string;
+  open_date: string;
+  linked_fund_acc?: string;
+}
 
 export default function SecuritiesAccounts() {
-  const [accounts, setAccounts] = useState(MOCK_ACCOUNTS);
+  const [accounts, setAccounts] = useState<SecurityAccount[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
   const [newAccountId, setNewAccountId] = useState("");
   const [isChecking, setIsChecking] = useState(false);
   const [checkError, setCheckError] = useState("");
+  
+  // 挂失/补办/销户相关状态
+  const [actionModalOpen, setActionModalOpen] = useState(false);
+  const [actionType, setActionType] = useState<'loss' | 'reissue' | 'close' | null>(null);
+  const [selectedAccount, setSelectedAccount] = useState<SecurityAccount | null>(null);
+  const [actionReason, setActionReason] = useState("");
+  const [actionLoading, setActionLoading] = useState(false);
+  const [actionError, setActionError] = useState("");
+  
+  // 获取账户列表
+  const fetchAccounts = async () => {
+    try {
+      setLoading(true);
+      const response = await api.listSecurityAccounts();
+      if (response.code === 0 && response.data) {
+        setAccounts(response.data);
+      } else {
+        console.error('获取账户列表失败:', response.message);
+      }
+    } catch (error) {
+      console.error('获取账户列表失败:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchAccounts();
+  }, []);
 
   const handleCreateAccount = async () => {
     setIsChecking(true);
@@ -30,7 +63,8 @@ export default function SecuritiesAccounts() {
     
     // 获取开户人姓名（根据账户类型从不同字段获取）
     const activeTab = document.querySelector('[data-state="active"]')?.getAttribute('value') || 'individual';
-    const nameInput = activeTab === 'individual' 
+    const isIndividual = activeTab === 'individual';
+    const nameInput = isIndividual
       ? document.getElementById('name') as HTMLInputElement
       : document.getElementById('corpName') as HTMLInputElement;
     const userName = nameInput?.value || '';
@@ -50,11 +84,73 @@ export default function SecuritiesAccounts() {
       } else if (!newAccountId) {
         setCheckError("请输入有效的证件号码进行核查");
       } else {
-        // 黑名单检查通过，继续开户流程
-        setIsAccountModalOpen(false);
-        setNewAccountId("");
-        setCheckError("");
-        // TODO: 调用实际的开户API
+        // 黑名单检查通过，调用开户API
+        let accountData: any;
+        
+        if (isIndividual) {
+          // 个人账户
+          const gender = (document.getElementById('gender') as HTMLSelectElement)?.value || '男';
+          const address = (document.getElementById('address') as HTMLInputElement)?.value || '';
+          const occupation = (document.getElementById('occupation') as HTMLInputElement)?.value || '';
+          const education = (document.getElementById('education') as HTMLInputElement)?.value || '';
+          const workplace = (document.getElementById('workplace') as HTMLInputElement)?.value || '';
+          const phone = (document.getElementById('phone') as HTMLInputElement)?.value || '';
+          
+          accountData = {
+            investor_type: '个人',
+            name: userName,
+            gender: gender,
+            id_type: '身份证',
+            id_number: newAccountId,
+            phone: phone,
+            address: address,
+            work_unit: workplace,
+            occupation: occupation,
+            education: education
+          };
+        } else {
+          // 法人账户
+          const regNumber = (document.getElementById('regNumber') as HTMLInputElement)?.value || '';
+          const license = (document.getElementById('license') as HTMLInputElement)?.value || '';
+          const legalRepId = (document.getElementById('legalRepId') as HTMLInputElement)?.value || '';
+          const corpPhone = (document.getElementById('corpPhone') as HTMLInputElement)?.value || '';
+          const corpAddress = (document.getElementById('corpAddress') as HTMLInputElement)?.value || '';
+          const authName = (document.getElementById('authName') as HTMLInputElement)?.value || '';
+          const authId = (document.getElementById('authId') as HTMLInputElement)?.value || '';
+          const authPhone = (document.getElementById('authPhone') as HTMLInputElement)?.value || '';
+          const authAddress = (document.getElementById('authAddress') as HTMLInputElement)?.value || '';
+          
+          accountData = {
+            investor_type: '法人',
+            name: userName,
+            id_type: '营业执照',
+            id_number: regNumber || newAccountId,
+            phone: corpPhone,
+            address: corpAddress,
+            business_license: license,
+            authorize_name: authName,
+            authorize_phone: authPhone,
+            authorize_address: authAddress,
+            agent_name: authName,
+            agent_id_number: authId
+          };
+        }
+        
+        try {
+          const result = await api.createSecuritiesAccount(accountData);
+          if (result.code === 0) {
+            setIsAccountModalOpen(false);
+            setNewAccountId("");
+            setCheckError("");
+            alert(`开户成功！证券账户号: ${result.sec_acc_no || '已生成'}`);
+            // 刷新账户列表
+            fetchAccounts();
+          } else {
+            setCheckError(result.message || "开户失败");
+          }
+        } catch (error: any) {
+          setCheckError(error.message || "开户失败，请检查网络连接");
+        }
       }
     } catch (error) {
       setCheckError("黑名单查询服务暂时不可用，请稍后重试");
@@ -62,6 +158,53 @@ export default function SecuritiesAccounts() {
       setIsChecking(false);
     }
   };
+
+  // 打开操作对话框
+  const openActionModal = (account: SecurityAccount, type: 'loss' | 'reissue' | 'close') => {
+    setSelectedAccount(account);
+    setActionType(type);
+    setActionReason("");
+    setActionError("");
+    setActionModalOpen(true);
+  };
+
+  // 执行账户操作（挂失/补办/销户）
+  const handleAccountAction = async () => {
+    if (!selectedAccount || !actionType) return;
+    
+    setActionLoading(true);
+    setActionError("");
+    
+    try {
+      let result;
+      if (actionType === 'loss') {
+        result = await api.reportSecurityLoss(selectedAccount.sec_acc_no, actionReason, selectedAccount.id_number);
+      } else if (actionType === 'reissue') {
+        result = await api.reissueSecurityAccount(selectedAccount.sec_acc_no, actionReason, selectedAccount.id_number);
+      } else if (actionType === 'close') {
+        result = await api.closeSecurityAccount(selectedAccount.sec_acc_no, actionReason, selectedAccount.id_number);
+      }
+      
+      if (result && result.code === 0) {
+        setActionModalOpen(false);
+        alert(actionType === 'loss' ? '挂失成功' : actionType === 'reissue' ? '补办成功' : '销户成功');
+        fetchAccounts(); // 刷新列表
+      } else {
+        setActionError(result?.message || "操作失败");
+      }
+    } catch (error: any) {
+      setActionError(error.message || "操作失败，请检查网络连接");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // 过滤账户列表
+  const filteredAccounts = accounts.filter(account => 
+    account.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    account.sec_acc_no?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    account.id_number?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   return (
     <div className="space-y-6">
@@ -207,6 +350,9 @@ export default function SecuritiesAccounts() {
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
+        <Button variant="outline" size="sm" onClick={fetchAccounts} disabled={loading}>
+          <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+        </Button>
       </div>
 
       <div className="rounded-md border border-slate-200 bg-white">
@@ -223,104 +369,128 @@ export default function SecuritiesAccounts() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {accounts.map((account) => (
-              <TableRow key={account.id}>
-                <TableCell className="font-medium">{account.id}</TableCell>
-                <TableCell>
-                  {account.type === 'individual' ? (
-                    <span className="inline-flex items-center rounded-md bg-red-50 px-2 py-1 text-xs font-medium text-red-700 ring-1 ring-inset ring-red-700/10">个人</span>
-                  ) : (
-                    <span className="inline-flex items-center rounded-md bg-orange-50 px-2 py-1 text-xs font-medium text-orange-700 ring-1 ring-inset ring-orange-700/10">法人</span>
-                  )}
-                </TableCell>
-                <TableCell>{account.name}</TableCell>
-                <TableCell className="text-slate-500">{account.idNumber}</TableCell>
-                <TableCell>
-                  {account.status === 'normal' ? (
-                    <span className="inline-flex items-center rounded-md bg-green-50 px-2 py-1 text-xs font-medium text-green-700 ring-1 ring-inset ring-green-600/20">正常</span>
-                  ) : account.status === 'frozen' ? (
-                    <span className="inline-flex items-center rounded-md bg-yellow-50 px-2 py-1 text-xs font-medium text-yellow-800 ring-1 ring-inset ring-yellow-600/20">挂失/冻结</span>
-                  ) : account.status === 'blacklisted' ? (
-                    <span className="inline-flex items-center rounded-md bg-slate-800 px-2 py-1 text-xs font-medium text-slate-100 ring-1 ring-inset ring-slate-600">黑名单</span>
-                  ) : (
-                    <span className="inline-flex items-center rounded-md bg-red-50 px-2 py-1 text-xs font-medium text-red-700 ring-1 ring-inset ring-red-600/10">已销户</span>
-                  )}
-                </TableCell>
-                <TableCell className="text-slate-500">{account.openDate}</TableCell>
-                <TableCell className="text-right">
-                  <div className="flex justify-end gap-2">
-                    {account.status === 'normal' && (
-                      <Dialog>
-                        <DialogTrigger asChild>
-                          <Button variant="outline" size="sm" className="h-8 text-yellow-600 border-yellow-200 hover:bg-yellow-50">
-                            <AlertCircle className="mr-1 h-3 w-3" /> 挂失
-                          </Button>
-                        </DialogTrigger>
-                        <DialogContent>
-                          <DialogHeader>
-                            <DialogTitle>证券账户挂失</DialogTitle>
-                            <DialogDescription>
-                              办理挂失将冻结账户 {account.id} 下所有的证券，不可进行买卖。您确定要挂失该账户吗？
-                            </DialogDescription>
-                          </DialogHeader>
-                          <div className="py-4 space-y-4">
-                            <div className="space-y-2">
-                              <Label>审核操作人密码</Label>
-                              <Input type="password" placeholder="输入管理员密码确认" />
-                            </div>
-                          </div>
-                          <DialogFooter>
-                            <Button variant="outline">取消</Button>
-                            <Button variant="destructive">确认冻结账户</Button>
-                          </DialogFooter>
-                        </DialogContent>
-                      </Dialog>
-                    )}
-
-                    {account.status === 'frozen' && (
-                      <Button variant="outline" size="sm" className="h-8 text-red-600 border-red-200 hover:bg-red-50">
-                        <RefreshCw className="mr-1 h-3 w-3" /> 补办/重新开户
-                      </Button>
-                    )}
-
-                    {account.status === 'blacklisted' && (
-                      <span className="text-xs text-slate-500 flex items-center justify-end h-8">
-                        异常管控账户
-                      </span>
-                    )}
-
-                    {account.status !== 'closed' && account.status !== 'blacklisted' && (
-                      <Dialog>
-                        <DialogTrigger asChild>
-                          <Button variant="outline" size="sm" className="h-8 text-red-600 border-red-200 hover:bg-red-50">
-                            <XCircle className="mr-1 h-3 w-3" /> 销户
-                          </Button>
-                        </DialogTrigger>
-                        <DialogContent>
-                          <DialogHeader>
-                            <DialogTitle>证券账户销户</DialogTitle>
-                            <DialogDescription>
-                              销户前必须确认该账户中的所有证券已全部卖出清空。此操作不可逆！
-                            </DialogDescription>
-                          </DialogHeader>
-                          <div className="py-4 bg-red-50 p-4 rounded-md border border-red-100 mt-4">
-                            <p className="text-sm text-red-800 font-medium">系统检查结果：</p>
-                            <p className="text-sm text-red-600 mt-1">该账户仍持有 2 只股票（共计 1500 股），请提示用户先卖出所有证券后再办理销户手续。</p>
-                          </div>
-                          <DialogFooter>
-                            <Button variant="outline">关闭</Button>
-                            <Button variant="destructive" disabled>强制销户 (不可用)</Button>
-                          </DialogFooter>
-                        </DialogContent>
-                      </Dialog>
-                    )}
-                  </div>
+            {loading ? (
+              <TableRow>
+                <TableCell colSpan={7} className="text-center py-8 text-slate-500">
+                  加载中...
                 </TableCell>
               </TableRow>
-            ))}
+            ) : filteredAccounts.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={7} className="text-center py-8 text-slate-500">
+                  暂无数据
+                </TableCell>
+              </TableRow>
+            ) : (
+              filteredAccounts.map((account) => (
+                <TableRow key={account.sec_acc_no}>
+                  <TableCell className="font-medium">{account.sec_acc_no}</TableCell>
+                  <TableCell>
+                    {account.investor_type === '个人' ? (
+                      <span className="inline-flex items-center rounded-md bg-red-50 px-2 py-1 text-xs font-medium text-red-700 ring-1 ring-inset ring-red-700/10">个人</span>
+                    ) : (
+                      <span className="inline-flex items-center rounded-md bg-orange-50 px-2 py-1 text-xs font-medium text-orange-700 ring-1 ring-inset ring-orange-700/10">法人</span>
+                    )}
+                  </TableCell>
+                  <TableCell>{account.name}</TableCell>
+                  <TableCell className="text-slate-500">{account.id_number}</TableCell>
+                  <TableCell>
+                    {account.status === 'normal' ? (
+                      <span className="inline-flex items-center rounded-md bg-green-50 px-2 py-1 text-xs font-medium text-green-700 ring-1 ring-inset ring-green-600/20">正常</span>
+                    ) : account.status === 'frozen' ? (
+                      <span className="inline-flex items-center rounded-md bg-yellow-50 px-2 py-1 text-xs font-medium text-yellow-800 ring-1 ring-inset ring-yellow-600/20">挂失/冻结</span>
+                    ) : account.status === 'blacklisted' ? (
+                      <span className="inline-flex items-center rounded-md bg-slate-800 px-2 py-1 text-xs font-medium text-slate-100 ring-1 ring-inset ring-slate-600">黑名单</span>
+                    ) : (
+                      <span className="inline-flex items-center rounded-md bg-red-50 px-2 py-1 text-xs font-medium text-red-700 ring-1 ring-inset ring-red-600/10">已销户</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-slate-500">{account.open_date}</TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-2">
+                      {account.status === 'normal' && (
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          className="h-8 text-yellow-600 border-yellow-200 hover:bg-yellow-50"
+                          onClick={() => openActionModal(account, 'loss')}
+                        >
+                          <AlertCircle className="mr-1 h-3 w-3" /> 挂失
+                        </Button>
+                      )}
+
+                      {account.status === 'frozen' && (
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          className="h-8 text-red-600 border-red-200 hover:bg-red-50"
+                          onClick={() => openActionModal(account, 'reissue')}
+                        >
+                          <RefreshCw className="mr-1 h-3 w-3" /> 补办
+                        </Button>
+                      )}
+
+                      {account.status !== 'closed' && account.status !== 'blacklisted' && account.status !== 'frozen' && (
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          className="h-8 text-red-600 border-red-200 hover:bg-red-50"
+                          onClick={() => openActionModal(account, 'close')}
+                        >
+                          <XCircle className="mr-1 h-3 w-3" /> 销户
+                        </Button>
+                      )}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
           </TableBody>
         </Table>
       </div>
+
+      {/* 操作对话框（挂失/补办/销户） */}
+      <Dialog open={actionModalOpen} onOpenChange={setActionModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {actionType === 'loss' ? '证券账户挂失' : actionType === 'reissue' ? '证券账户补办' : '证券账户销户'}
+            </DialogTitle>
+            <DialogDescription>
+              {actionType === 'loss' 
+                ? `办理挂失将冻结账户 ${selectedAccount?.sec_acc_no} 下所有的证券，不可进行买卖。` 
+                : actionType === 'reissue' 
+                  ? `为账户 ${selectedAccount?.sec_acc_no} 办理补办，将生成新的账户号码。`
+                  : `销户前必须确认该账户中的所有证券已全部卖出清空。此操作不可逆！`}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div className="space-y-2">
+              <Label>{actionType === 'close' ? '销户原因' : '操作原因'}</Label>
+              <Input 
+                value={actionReason} 
+                onChange={(e) => setActionReason(e.target.value)} 
+                placeholder={actionType === 'close' ? '请输入销户原因' : '请输入原因（可选）'} 
+              />
+            </div>
+            {actionError && (
+              <div className="text-sm text-red-600 bg-red-50 p-2 rounded">
+                {actionError}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setActionModalOpen(false)}>取消</Button>
+            <Button 
+              variant="destructive" 
+              onClick={handleAccountAction}
+              disabled={actionLoading}
+            >
+              {actionLoading ? '处理中...' : actionType === 'loss' ? '确认挂失' : actionType === 'reissue' ? '确认补办' : '确认销户'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

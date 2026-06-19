@@ -21,9 +21,19 @@ export default function UserDashboard() {
     setLoading(true);
     setError("");
     try {
+      // 检查是否已登录
+      const fundAccNo = localStorage.getItem("fund_acc_no");
+      const authToken = localStorage.getItem("stock_trading_auth_token");
+      
+      if (!fundAccNo || !authToken) {
+        // 未登录，跳转到登录页
+        navigate("/login");
+        return;
+      }
+      
       const accountData = await api.getFundSnapshot();
       setAccount({
-        accountNo: accountData.fund_acc_no || localStorage.getItem("fund_acc_no"),
+        accountNo: accountData.fund_acc_no || fundAccNo,
         availableBalance: accountData.available_balance || 0,
         frozenBalance: accountData.frozen_balance || 0,
         totalBalance: accountData.total_balance || 0,
@@ -39,7 +49,7 @@ export default function UserDashboard() {
       }
     } catch (err: any) {
       setError(err.message || "加载数据失败");
-      if (err.message?.includes("认证") || err.message?.includes("鉴权") || err.message?.includes("token")) {
+      if (err.message?.includes("认证") || err.message?.includes("鉴权") || err.message?.includes("token") || err.message?.includes("不能为空")) {
         navigate("/login");
       }
     } finally {

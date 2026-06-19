@@ -747,6 +747,27 @@ if (isBlacklisted) {
 - **用途**: 证券开户、资金开户前检查用户是否在黑名单中
 - **前端位置**: `FundAccounts.tsx` 和 `SecuritiesAccounts.tsx`
 
+### 7.2.4 Dashboard 统计接口（新增）
+
+| 功能 | 前端方法 | 后端接口 |
+|------|---------|---------|
+| 统计数据 | `getDashboardStats()` | `GET /api/internal/dashboard/stats` |
+| 最近日志 | `getRecentLogs()` | `GET /api/internal/dashboard/recent-logs` |
+
+返回数据：
+- `security_account_count`: 证券账户总数
+- `fund_account_count`: 资金账户总数
+- `today_new_accounts`: 今日新开账户数
+- `abnormal_account_count`: 异常账户数（冻结状态）
+
+### 7.2.5 账户列表查询接口（新增）
+
+| 功能 | 前端方法 | 后端接口 |
+|------|---------|---------|
+| 证券账户列表 | `listSecurityAccounts()` | `GET /api/internal/security/accounts` |
+| 资金账户列表 | `listFundAccounts()` | `GET /api/internal/fund/accounts/list` |
+
+
 ### 7.3 认证机制
 
 #### 投资者端（auth_token）
@@ -758,6 +779,18 @@ if (isBlacklisted) {
 1. 登录成功后，后端返回 `staff_auth_token`
 2. 前端保存到 `localStorage`
 3. 后续请求通过 HTTP Header `staff_auth_token` 传递
+
+### 7.4 安全退出功能
+
+管理端和用户端均实现了安全退出功能：
+
+- **管理端**: 点击侧边栏"退出登录"按钮
+- **用户端**: 点击侧边栏"安全退出"按钮
+
+退出操作会：
+1. 清除 `localStorage` 中的 token（`api.clearToken()`）
+2. 跳转到登录页面（`/login`）
+
 
 ## 8. 使用方法
 

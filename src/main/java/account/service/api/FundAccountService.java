@@ -9,6 +9,7 @@ import account.dto.CloseFundAccountRequest;
 import account.dto.CreateFundAccountRequest;
 import account.dto.DepositRequest;
 import account.dto.FundAccountCreatedResponse;
+import account.dto.FundAccountListItemResponse;
 import account.dto.FundBalanceChangeResponse;
 import account.dto.FundInfoResponse;
 import account.dto.FundSnapshotResponse;
@@ -18,6 +19,7 @@ import account.dto.ReissueFundAccountRequest;
 import account.dto.ReportFundLossRequest;
 import account.dto.UpdateFundBalanceRequest;
 import account.dto.WithdrawRequest;
+import java.util.List;
 
 public interface FundAccountService {
 
@@ -48,4 +50,6 @@ public interface FundAccountService {
     AccountBindingResponse bindSecurityAccount(String fundAccNo, String secAccNo, Integer staffId);
 
     AccountBindingResponse unbindSecurityAccount(String fundAccNo, String secAccNo, Integer staffId);
+
+    List<FundAccountListItemResponse> listAllFundAccounts();
 }

@@ -1,8 +1,8 @@
-CREATE DATABASE IF NOT EXISTS stock_account_system
+CREATE DATABASE IF NOT EXISTS account_db
   DEFAULT CHARACTER SET utf8mb4
   DEFAULT COLLATE utf8mb4_0900_ai_ci;
 
-USE stock_account_system;
+USE account_db;
 
 SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
