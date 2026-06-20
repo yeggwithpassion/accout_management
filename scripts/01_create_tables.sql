@@ -163,4 +163,16 @@ ALTER TABLE security_account
     ADD CONSTRAINT fk_security_account_linked_fund
     FOREIGN KEY (linked_fund_acc) REFERENCES fund_account (fund_acc_no);
 
+CREATE TABLE login_certificate_state (
+    state_id BIGINT NOT NULL AUTO_INCREMENT,
+    subject_type VARCHAR(50) NOT NULL COMMENT '主体类型：STAFF 或其他',
+    subject_key VARCHAR(100) NOT NULL COMMENT '主体标识：用户名',
+    certificate_verified BOOLEAN NOT NULL DEFAULT FALSE COMMENT '是否已验证证书',
+    verified_at DATETIME NULL COMMENT '验证时间',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (state_id),
+    UNIQUE KEY uk_login_cert_subject (subject_type, subject_key)
+) ENGINE=InnoDB COMMENT='登录证书验证状态表';
+
 SET FOREIGN_KEY_CHECKS = 1;
