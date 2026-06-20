@@ -1,27 +1,29 @@
 import { createBrowserRouter, useRouteError } from "react-router";
+import { Layout } from "./components/Layout";
+import { RequireAuth } from "./components/RequireAuth";
+import { UserLayout } from "./components/UserLayout";
+import Dashboard from "./pages/Dashboard";
+import FundAccounts from "./pages/FundAccounts";
+import CertificateAuth from "./pages/CertificateAuth";
+import Login from "./pages/Login";
+import SecuritiesAccounts from "./pages/SecuritiesAccounts";
+import ChangePassword from "./pages/user/ChangePassword";
+import Transfer from "./pages/user/Transfer";
+import UserDashboard from "./pages/user/UserDashboard";
 
 function ErrorBoundary() {
-  const error = useRouteError() as any;
+  const error = useRouteError() as Error | undefined;
   console.error(error);
+
   return (
-    <div className="p-4 text-red-500">
-      <h1 className="text-xl font-bold mb-2">出错了</h1>
-      <pre className="bg-red-50 p-4 rounded overflow-auto">{error?.message || "Unknown error"}</pre>
+    <div className="p-4 text-red-600">
+      <h1 className="mb-2 text-xl font-bold">页面加载失败</h1>
+      <pre className="overflow-auto rounded bg-red-50 p-4">
+        {error?.message || "Unknown error"}
+      </pre>
     </div>
   );
 }
-
-import Login from "./pages/Login";
-
-import { Layout } from "./components/Layout";
-import Dashboard from "./pages/Dashboard";
-import SecuritiesAccounts from "./pages/SecuritiesAccounts";
-import FundAccounts from "./pages/FundAccounts";
-
-import { UserLayout } from "./components/UserLayout";
-import UserDashboard from "./pages/user/UserDashboard";
-import Transfer from "./pages/user/Transfer";
-import ChangePassword from "./pages/user/ChangePassword";
 
 export const router = createBrowserRouter([
   {
@@ -30,23 +32,38 @@ export const router = createBrowserRouter([
     errorElement: <ErrorBoundary />,
   },
   {
-    path: "/",
-    Component: Layout,
+    path: "/certificate",
+    Component: CertificateAuth,
+    errorElement: <ErrorBoundary />,
+  },
+  {
+    Component: () => <RequireAuth mode="admin" />,
     errorElement: <ErrorBoundary />,
     children: [
-      { index: true, Component: Dashboard },
-      { path: "securities", Component: SecuritiesAccounts },
-      { path: "funds", Component: FundAccounts },
+      {
+        path: "/",
+        Component: Layout,
+        children: [
+          { index: true, Component: Dashboard },
+          { path: "securities", Component: SecuritiesAccounts },
+          { path: "funds", Component: FundAccounts },
+        ],
+      },
     ],
   },
   {
-    path: "/user",
-    Component: UserLayout,
+    Component: () => <RequireAuth mode="user" />,
     errorElement: <ErrorBoundary />,
     children: [
-      { index: true, Component: UserDashboard },
-      { path: "transfer", Component: Transfer },
-      { path: "password", Component: ChangePassword },
+      {
+        path: "/user",
+        Component: UserLayout,
+        children: [
+          { index: true, Component: UserDashboard },
+          { path: "transfer", Component: Transfer },
+          { path: "password", Component: ChangePassword },
+        ],
+      },
     ],
-  }
+  },
 ]);

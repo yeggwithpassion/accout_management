@@ -11,6 +11,7 @@ import account.dto.ChangeFundPasswordRequest;
 import account.dto.ClientChangeFundPasswordRequest;
 import account.dto.ClientLoginAuthResponse;
 import account.dto.CloseFundAccountRequest;
+import account.dto.CompleteLoginCertificateRequest;
 import account.dto.CreateFundAccountRequest;
 import account.dto.DepositRequest;
 import account.dto.FundAccountCreatedResponse;
@@ -27,6 +28,7 @@ import account.dto.UpdateFundBalanceRequest;
 import account.dto.WithdrawRequest;
 import account.enums.AccountStatus;
 import account.integration.BlacklistClient;
+import account.integration.BlacklistClientException;
 import account.service.api.ClientAuthTokenService;
 import account.service.api.FundAccountService;
 import java.math.BigDecimal;
@@ -41,6 +43,9 @@ import org.springframework.stereotype.Service;
 @Slf4j
 @Service
 public class FundAccountServiceImpl implements FundAccountService {
+
+    private static final String FUND_CERTIFICATE_SUBJECT = "FUND";
+    private static final String DEFAULT_CERTIFICATE_CODE = "CERT-123456";
 
     private final DaoRegistry dao;
     private final BlacklistClient blacklistClient;
@@ -70,13 +75,8 @@ public class FundAccountServiceImpl implements FundAccountService {
             throw new BusinessException(ErrorCode.ERR_013, "身份证号与证券账户持有人不一致");
         }
 
-        // 黑名单检查（服务不可用时跳过）
-        try {
-            if (dao.blacklistSupport(blacklistClient).isBlockedBySecurityAccountNo(request.getSecAccNo())) {
-                throw new BusinessException(ErrorCode.ERR_012, "投资者在黑名单中，无法开立资金账户");
-            }
-        } catch (Exception e) {
-            log.warn("Blacklist check failed for sec_acc_no '{}', continuing with fund account creation: {}", request.getSecAccNo(), e.getMessage());
+        if (isBlacklistedBySecurityAccountNo(request.getSecAccNo())) {
+            throw new BusinessException(ErrorCode.ERR_012, "投资者在黑名单中，无法开立资金账户");
         }
 
         if (secAccount.status() == DomainEnums.AccountStatus.CLOSED) {
@@ -244,6 +244,8 @@ public class FundAccountServiceImpl implements FundAccountService {
                 throw new BusinessException(ErrorCode.ERR_021, "资金账户当前状态不允许挂失");
             }
 
+            BigDecimal frozenBalance = account.frozenBalance().add(account.availableBalance());
+            dao.fundAccountDao().updateBalances(connection, request.getFundAccNo(), BigDecimal.ZERO, frozenBalance);
             dao.fundAccountDao().updateStatus(connection, request.getFundAccNo(), DomainEnums.AccountStatus.LOSS_FROZEN);
             freezeLinkedSecurityForFundLoss(connection, account.secAccNo());
 
@@ -276,14 +278,15 @@ public class FundAccountServiceImpl implements FundAccountService {
             }
 
             String newFundAccNo = AccountNumberGenerator.generateFundAccountNo();
+            BigDecimal migratedBalance = oldAccount.availableBalance().add(oldAccount.frozenBalance());
             dao.fundAccountDao().relinkSecurityAccount(connection, request.getOldFundAccNo(), null);
             dao.fundAccountDao().create(connection, new DomainModels.FundAccount(
                     newFundAccNo,
                     oldAccount.secAccNo(),
                     PasswordUtil.hash(request.getNewTradePassword()),
                     PasswordUtil.hash(request.getNewWithdrawPassword()),
-                    oldAccount.availableBalance(),
-                    oldAccount.frozenBalance(),
+                    migratedBalance,
+                    BigDecimal.ZERO,
                     oldAccount.currency(),
                     DomainEnums.AccountStatus.NORMAL,
                     LocalDate.now(),
@@ -291,6 +294,7 @@ public class FundAccountServiceImpl implements FundAccountService {
                     oldAccount.annualInterestRate()
             ));
 
+            dao.fundAccountDao().updateBalances(connection, request.getOldFundAccNo(), BigDecimal.ZERO, BigDecimal.ZERO);
             dao.fundAccountDao().updateStatus(connection, request.getOldFundAccNo(), DomainEnums.AccountStatus.CLOSED);
             dao.securityAccountDao().bindFundAccount(connection, oldAccount.secAccNo(), newFundAccNo);
             normalizeSecurityAfterRebind(connection, oldAccount.secAccNo());
@@ -399,6 +403,38 @@ public class FundAccountServiceImpl implements FundAccountService {
     }
 
     @Override
+    public List<FundLogView> queryFundLogs(String fundAccNo, String idNumber, int limit, Integer staffId) {
+        var account = dao.fundAccountDao().findByAccountNo(fundAccNo)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ERR_010, "资金账户不存在: " + fundAccNo));
+
+        if (idNumber != null && !idNumber.isBlank() && account.secAccNo() != null && !account.secAccNo().isBlank()) {
+            verifyOwnership(account.secAccNo(), idNumber);
+        }
+
+        int safeLimit = Math.max(1, Math.min(limit, 200));
+        List<FundLogView> logs = dao.fundTransactionLogDao().listRecentByFundAccountNo(fundAccNo, safeLimit).stream()
+                .map(this::toUnifiedFundLogView)
+                .toList();
+
+        if (staffId != null) {
+            dao.transactionManager().execute(connection -> {
+                dao.operationLogDao().create(connection, new DomainModels.OperationLog(
+                        null,
+                        staffId,
+                        "查询资金流水",
+                        "FUND",
+                        fundAccNo,
+                        "查询资金流水 limit=" + safeLimit,
+                        LocalDateTime.now()
+                ));
+                return null;
+            });
+        }
+
+        return logs;
+    }
+
+    @Override
     public ClientLoginAuthResponse clientLoginAuth(String fundAccNo, String tradePassword) {
         var account = dao.fundAccountDao().findByAccountNo(fundAccNo)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ERR_010, "资金账户不存在"));
@@ -411,12 +447,25 @@ public class FundAccountServiceImpl implements FundAccountService {
             throw new BusinessException(ErrorCode.ERR_004, "交易密码错误");
         }
 
+        var certificateState = ensureCertificateState(FUND_CERTIFICATE_SUBJECT, fundAccNo);
+        if (!certificateState.certificateVerified()) {
+            return ClientLoginAuthResponse.builder()
+                    .fundAccNo(fundAccNo)
+                    .secAccNo(account.secAccNo())
+                    .status(AccountStatus.NORMAL.code())
+                    .requiresCertificate(true)
+                    .certificateSubjectType(FUND_CERTIFICATE_SUBJECT)
+                    .certificateSubjectKey(fundAccNo)
+                    .build();
+        }
+
         String authToken = clientAuthTokenService.issueToken(fundAccNo, account.secAccNo());
         return ClientLoginAuthResponse.builder()
                 .authToken(authToken)
                 .fundAccNo(fundAccNo)
                 .secAccNo(account.secAccNo())
                 .status(AccountStatus.NORMAL.code())
+                .requiresCertificate(false)
                 .build();
     }
 
@@ -444,6 +493,39 @@ public class FundAccountServiceImpl implements FundAccountService {
                 .currency(account.currency())
                 .status(EnumMapper.fromDaoStatus(account.status()).code())
                 .recentLogs(recentLogs)
+                .build();
+    }
+
+    @Override
+    public ClientLoginAuthResponse completeLoginCertificate(CompleteLoginCertificateRequest request) {
+        if (!FUND_CERTIFICATE_SUBJECT.equalsIgnoreCase(request.getSubjectType())) {
+            throw new BusinessException(ErrorCode.PARAM_INVALID, "subject_type must be FUND");
+        }
+        if (!DEFAULT_CERTIFICATE_CODE.equals(request.getCertificateCode().trim())) {
+            throw new BusinessException(ErrorCode.ERR_004, "安全证书认证码错误");
+        }
+
+        var account = dao.fundAccountDao().findByAccountNo(request.getSubjectKey())
+                .orElseThrow(() -> new BusinessException(ErrorCode.ERR_010, "资金账户不存在"));
+
+        checkAccountNotFrozenOrClosed(account.status(), account.fundAccNo());
+        if (account.secAccNo() == null || account.secAccNo().isBlank()) {
+            throw new BusinessException(ErrorCode.ERR_015, "资金账户未绑定证券账户，无法登录");
+        }
+
+        dao.transactionManager().execute(connection -> {
+            dao.loginCertificateStateDao().ensureExists(connection, FUND_CERTIFICATE_SUBJECT, account.fundAccNo());
+            dao.loginCertificateStateDao().markVerified(connection, FUND_CERTIFICATE_SUBJECT, account.fundAccNo(), LocalDateTime.now());
+            return null;
+        });
+
+        String authToken = clientAuthTokenService.issueToken(account.fundAccNo(), account.secAccNo());
+        return ClientLoginAuthResponse.builder()
+                .authToken(authToken)
+                .fundAccNo(account.fundAccNo())
+                .secAccNo(account.secAccNo())
+                .status(AccountStatus.NORMAL.code())
+                .requiresCertificate(false)
                 .build();
     }
 
@@ -700,12 +782,22 @@ public class FundAccountServiceImpl implements FundAccountService {
         };
     }
 
+    private boolean isBlacklistedBySecurityAccountNo(String secAccNo) {
+        try {
+            return dao.blacklistSupport(blacklistClient).isBlockedBySecurityAccountNo(secAccNo);
+        } catch (BlacklistClientException e) {
+            log.warn("Blacklist check failed for sec_acc_no '{}': {}", secAccNo, e.getMessage());
+            return false;
+        }
+    }
+
     private void freezeLinkedSecurityForFundLoss(java.sql.Connection connection, String secAccNo) {
         if (secAccNo == null || secAccNo.isBlank()) {
             return;
         }
         var securityAccount = dao.securityAccountDao().findByAccountNoForUpdate(connection, secAccNo)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ERR_005, "关联证券账户不存在: " + secAccNo));
+        freezeAllSecurityHoldings(connection, secAccNo);
         if (securityAccount.status() == DomainEnums.AccountStatus.NORMAL
                 || securityAccount.status() == DomainEnums.AccountStatus.NO_FUND_FROZEN) {
             dao.securityAccountDao().updateStatus(connection, secAccNo, DomainEnums.AccountStatus.LOSS_FROZEN);
@@ -724,8 +816,42 @@ public class FundAccountServiceImpl implements FundAccountService {
     private void normalizeSecurityAfterRebind(java.sql.Connection connection, String secAccNo) {
         var securityAccount = dao.securityAccountDao().findByAccountNoForUpdate(connection, secAccNo)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ERR_005, "证券账户不存在: " + secAccNo));
+        unfreezeAllSecurityHoldings(connection, secAccNo);
         if (securityAccount.status() == DomainEnums.AccountStatus.NO_FUND_FROZEN) {
             dao.securityAccountDao().updateStatus(connection, secAccNo, DomainEnums.AccountStatus.NORMAL);
+        }
+        if (securityAccount.status() == DomainEnums.AccountStatus.LOSS_FROZEN) {
+            dao.securityAccountDao().updateStatus(connection, secAccNo, DomainEnums.AccountStatus.NORMAL);
+        }
+    }
+
+    private void freezeAllSecurityHoldings(java.sql.Connection connection, String secAccNo) {
+        for (var holding : dao.holdingDao().listBySecurityAccountNo(secAccNo)) {
+            dao.holdingDao().saveOrUpdate(connection, new DomainModels.Holding(
+                    holding.holdingId(),
+                    holding.secAccNo(),
+                    holding.stockCode(),
+                    holding.stockName(),
+                    0,
+                    holding.quantity() + holding.frozenQuantity(),
+                    holding.avgCost(),
+                    LocalDateTime.now()
+            ));
+        }
+    }
+
+    private void unfreezeAllSecurityHoldings(java.sql.Connection connection, String secAccNo) {
+        for (var holding : dao.holdingDao().listBySecurityAccountNo(secAccNo)) {
+            dao.holdingDao().saveOrUpdate(connection, new DomainModels.Holding(
+                    holding.holdingId(),
+                    holding.secAccNo(),
+                    holding.stockCode(),
+                    holding.stockName(),
+                    holding.quantity() + holding.frozenQuantity(),
+                    0,
+                    holding.avgCost(),
+                    LocalDateTime.now()
+            ));
         }
     }
 
@@ -789,5 +915,13 @@ public class FundAccountServiceImpl implements FundAccountService {
                     .openDate(account.openDate().toString())
                     .build();
         }).toList();
+    }
+
+    private DomainModels.LoginCertificateState ensureCertificateState(String subjectType, String subjectKey) {
+        return dao.transactionManager().execute(connection -> {
+            dao.loginCertificateStateDao().ensureExists(connection, subjectType, subjectKey);
+            return dao.loginCertificateStateDao().findBySubjectForUpdate(connection, subjectType, subjectKey)
+                    .orElseThrow(() -> new BusinessException(ErrorCode.PARAM_INVALID, "certificate state not found"));
+        });
     }
 }

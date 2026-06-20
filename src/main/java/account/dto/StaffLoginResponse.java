@@ -23,6 +23,15 @@ public class StaffLoginResponse {
     @JsonProperty("status")
     private String status;
 
+    @JsonProperty("requires_certificate")
+    private Boolean requiresCertificate;
+
+    @JsonProperty("certificate_subject_type")
+    private String certificateSubjectType;
+
+    @JsonProperty("certificate_subject_key")
+    private String certificateSubjectKey;
+
     @JsonProperty("auth_token")
     private String authToken;
 }

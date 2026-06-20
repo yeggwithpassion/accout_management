@@ -26,6 +26,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class FundLogViewCompositionTest {
 
@@ -183,5 +184,24 @@ class FundLogViewCompositionTest {
         assertEquals(new BigDecimal("1500.0000"), view.getPrice());
         assertEquals(100, view.getHoldingQuantityAfter());
         assertEquals(0, view.getHoldingFrozenQuantityAfter());
+    }
+
+    @Test
+    void queryFundLogsReturnsRecentLogs() {
+        var logs = service.queryFundLogs("FA2026000099", "330101199001010011", 20, null);
+
+        assertEquals(1, logs.size());
+        FundLogView view = logs.get(0);
+        assertEquals("ORD-99", view.getRefOrderId());
+        assertEquals("600519", view.getStockCode());
+        assertEquals("贵州茅台", view.getStockName());
+    }
+
+    @Test
+    void queryFundLogsRejectsMismatchedIdentity() {
+        assertThrows(
+                account.common.BusinessException.class,
+                () -> service.queryFundLogs("FA2026000099", "330101199001010099", 20, null)
+        );
     }
 }

@@ -32,6 +32,12 @@ public class OperationLogView {
     @JsonProperty("target_id")
     private String targetId;
 
+    @JsonProperty("security_acc_no")
+    private String securityAccNo;
+
+    @JsonProperty("fund_acc_no")
+    private String fundAccNo;
+
     @JsonProperty("detail")
     private String detail;
 

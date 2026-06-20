@@ -163,7 +163,7 @@ public class AdminServiceImpl implements AdminService {
                     case VIOLATION -> DomainEnums.AccountStatus.VIOLATION_FROZEN;
                     default -> throw new BusinessException(ErrorCode.PARAM_INVALID, "不支持的冻结类型");
                 };
-                dao.fundAccountDao().updateStatus(connection, accountNo, newStatus);
+                freezeFundAccountAssets(connection, fundAccount, newStatus);
             } else {
                 var secAccount = dao.securityAccountDao().findByAccountNoForUpdate(connection, accountNo)
                         .orElseThrow(() -> new BusinessException(ErrorCode.ERR_005, "证券账户不存在: " + accountNo));
@@ -177,7 +177,7 @@ public class AdminServiceImpl implements AdminService {
                     case VIOLATION -> DomainEnums.AccountStatus.VIOLATION_FROZEN;
                     default -> throw new BusinessException(ErrorCode.PARAM_INVALID, "不支持的冻结类型");
                 };
-                dao.securityAccountDao().updateStatus(connection, accountNo, newStatus);
+                freezeSecurityAccountAssets(connection, secAccount, newStatus);
             }
 
             dao.operationLogDao().create(connection, new DomainModels.OperationLog(
@@ -218,7 +218,7 @@ public class AdminServiceImpl implements AdminService {
                     throw new BusinessException(ErrorCode.ERR_021, "资金账户未处于违规冻结状态");
                 }
 
-                dao.fundAccountDao().updateStatus(connection, accountNo, DomainEnums.AccountStatus.NORMAL);
+                unfreezeFundAccountAssets(connection, fundAccount);
             } else {
                 var secAccount = dao.securityAccountDao().findByAccountNoForUpdate(connection, accountNo)
                         .orElseThrow(() -> new BusinessException(ErrorCode.ERR_005, "证券账户不存在: " + accountNo));
@@ -227,7 +227,7 @@ public class AdminServiceImpl implements AdminService {
                     throw new BusinessException(ErrorCode.ERR_021, "证券账户未处于违规冻结状态");
                 }
 
-                dao.securityAccountDao().updateStatus(connection, accountNo, DomainEnums.AccountStatus.NORMAL);
+                unfreezeSecurityAccountAssets(connection, secAccount);
             }
 
             dao.operationLogDao().create(connection, new DomainModels.OperationLog(
@@ -366,5 +366,89 @@ public class AdminServiceImpl implements AdminService {
                     secAccNo, request.getForceReason());
             return null;
         });
+    }
+
+    private void freezeFundAccountAssets(
+            java.sql.Connection connection,
+            DomainModels.FundAccount fundAccount,
+            DomainEnums.AccountStatus newStatus
+    ) {
+        BigDecimal totalBalance = fundAccount.availableBalance().add(fundAccount.frozenBalance());
+        dao.fundAccountDao().updateBalances(connection, fundAccount.fundAccNo(), BigDecimal.ZERO, totalBalance);
+        dao.fundAccountDao().updateStatus(connection, fundAccount.fundAccNo(), newStatus);
+
+        if (fundAccount.secAccNo() == null || fundAccount.secAccNo().isBlank()) {
+            return;
+        }
+
+        var linkedSecurityAccount = dao.securityAccountDao().findByAccountNoForUpdate(connection, fundAccount.secAccNo())
+                .orElseThrow(() -> new BusinessException(ErrorCode.ERR_005, "鍏宠仈璇佸埜璐︽埛涓嶅瓨鍦? " + fundAccount.secAccNo()));
+        freezeSecurityAccountAssets(connection, linkedSecurityAccount, newStatus);
+    }
+
+    private void unfreezeFundAccountAssets(
+            java.sql.Connection connection,
+            DomainModels.FundAccount fundAccount
+    ) {
+        BigDecimal totalBalance = fundAccount.availableBalance().add(fundAccount.frozenBalance());
+        dao.fundAccountDao().updateBalances(connection, fundAccount.fundAccNo(), totalBalance, BigDecimal.ZERO);
+        dao.fundAccountDao().updateStatus(connection, fundAccount.fundAccNo(), DomainEnums.AccountStatus.NORMAL);
+
+        if (fundAccount.secAccNo() == null || fundAccount.secAccNo().isBlank()) {
+            return;
+        }
+
+        var linkedSecurityAccount = dao.securityAccountDao().findByAccountNoForUpdate(connection, fundAccount.secAccNo())
+                .orElseThrow(() -> new BusinessException(ErrorCode.ERR_005, "鍏宠仈璇佸埜璐︽埛涓嶅瓨鍦? " + fundAccount.secAccNo()));
+        if (linkedSecurityAccount.status() == DomainEnums.AccountStatus.VIOLATION_FROZEN) {
+            unfreezeSecurityAccountAssets(connection, linkedSecurityAccount);
+        }
+    }
+
+    private void freezeSecurityAccountAssets(
+            java.sql.Connection connection,
+            DomainModels.SecurityAccount securityAccount,
+            DomainEnums.AccountStatus newStatus
+    ) {
+        freezeAllSecurityHoldings(connection, securityAccount.secAccNo());
+        dao.securityAccountDao().updateStatus(connection, securityAccount.secAccNo(), newStatus);
+    }
+
+    private void unfreezeSecurityAccountAssets(
+            java.sql.Connection connection,
+            DomainModels.SecurityAccount securityAccount
+    ) {
+        unfreezeAllSecurityHoldings(connection, securityAccount.secAccNo());
+        dao.securityAccountDao().updateStatus(connection, securityAccount.secAccNo(), DomainEnums.AccountStatus.NORMAL);
+    }
+
+    private void freezeAllSecurityHoldings(java.sql.Connection connection, String secAccNo) {
+        for (var holding : dao.holdingDao().listBySecurityAccountNo(secAccNo)) {
+            dao.holdingDao().saveOrUpdate(connection, new DomainModels.Holding(
+                    holding.holdingId(),
+                    holding.secAccNo(),
+                    holding.stockCode(),
+                    holding.stockName(),
+                    0,
+                    holding.quantity() + holding.frozenQuantity(),
+                    holding.avgCost(),
+                    LocalDateTime.now()
+            ));
+        }
+    }
+
+    private void unfreezeAllSecurityHoldings(java.sql.Connection connection, String secAccNo) {
+        for (var holding : dao.holdingDao().listBySecurityAccountNo(secAccNo)) {
+            dao.holdingDao().saveOrUpdate(connection, new DomainModels.Holding(
+                    holding.holdingId(),
+                    holding.secAccNo(),
+                    holding.stockCode(),
+                    holding.stockName(),
+                    holding.quantity() + holding.frozenQuantity(),
+                    0,
+                    holding.avgCost(),
+                    LocalDateTime.now()
+            ));
+        }
     }
 }

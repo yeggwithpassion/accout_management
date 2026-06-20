@@ -1,172 +1,402 @@
-const API_BASE = '/api';
-const TRADE_MANAGEMENT_API_BASE = 'http://localhost:8081/api/trade-management';
+const API_BASE = "/api";
+const TRADE_MANAGEMENT_API_BASE =
+  (import.meta.env.VITE_TRADE_MANAGEMENT_API_BASE as string | undefined) ||
+  "http://10.196.95.30:8081/api/trade-management";
+
+const STAFF_TOKEN_KEY = "stock_trading_token";
+const CLIENT_TOKEN_KEY = "stock_trading_auth_token";
+const STAFF_USERNAME_KEY = "staff_username";
+const STAFF_ID_KEY = "staff_id";
+const FUND_ACCOUNT_KEY = "fund_acc_no";
+const SECURITY_ACCOUNT_KEY = "sec_acc_no";
+const CERTIFICATE_SUBJECT_TYPE_KEY = "certificate_subject_type";
+const CERTIFICATE_SUBJECT_KEY_KEY = "certificate_subject_key";
+const CERTIFICATE_LOGIN_MODE_KEY = "certificate_login_mode";
+
+type LoginMode = "admin" | "user";
+
+export class ApiError extends Error {
+  code?: number;
+  constructor(message: string, code?: number) {
+    super(message);
+    this.name = "ApiError";
+    this.code = code;
+  }
+}
 
 class ApiClient {
-  private token: string | null = null;
-  private authToken: string | null = null; // Java后端使用的auth_token
+  private staffToken: string | null = null;
+  private clientToken: string | null = null;
 
-  setToken(token: string) {
-    this.token = token;
-    localStorage.setItem('stock_trading_token', token);
+  private readSessionValue(key: string) {
+    const sessionValue = window.sessionStorage.getItem(key);
+    if (sessionValue !== null) {
+      return sessionValue;
+    }
+
+    const legacyValue = window.localStorage.getItem(key);
+    if (legacyValue !== null) {
+      // Migrate existing login state into session storage so refresh keeps it,
+      // while closing the tab requires a fresh login.
+      window.sessionStorage.setItem(key, legacyValue);
+      window.localStorage.removeItem(key);
+      return legacyValue;
+    }
+
+    return null;
   }
 
-  getToken(): string | null {
-    if (this.token) return this.token;
-    this.token = localStorage.getItem('stock_trading_token');
-    return this.token;
+  private writeSessionValue(key: string, value: string) {
+    window.sessionStorage.setItem(key, value);
+    window.localStorage.removeItem(key);
   }
 
-  setAuthToken(authToken: string) {
-    this.authToken = authToken;
-    localStorage.setItem('stock_trading_auth_token', authToken);
+  private removeSessionValue(key: string) {
+    window.sessionStorage.removeItem(key);
+    window.localStorage.removeItem(key);
   }
 
-  getAuthToken(): string | null {
-    if (this.authToken) return this.authToken;
-    this.authToken = localStorage.getItem('stock_trading_auth_token');
-    return this.authToken;
+  private getStaffToken() {
+    if (this.staffToken) return this.staffToken;
+    this.staffToken = this.readSessionValue(STAFF_TOKEN_KEY);
+    return this.staffToken;
+  }
+
+  private getClientToken() {
+    if (this.clientToken) return this.clientToken;
+    this.clientToken = this.readSessionValue(CLIENT_TOKEN_KEY);
+    return this.clientToken;
+  }
+
+  setStaffSession(token: string, username?: string | null, staffId?: number | null) {
+    this.staffToken = token;
+    this.writeSessionValue(STAFF_TOKEN_KEY, token);
+    if (username) {
+      this.writeSessionValue(STAFF_USERNAME_KEY, username);
+    }
+    if (staffId !== undefined && staffId !== null) {
+      this.writeSessionValue(STAFF_ID_KEY, String(staffId));
+    }
+  }
+
+  setClientSession(token: string, fundAccNo?: string | null, secAccNo?: string | null) {
+    this.clientToken = token;
+    this.writeSessionValue(CLIENT_TOKEN_KEY, token);
+    if (fundAccNo) {
+      this.writeSessionValue(FUND_ACCOUNT_KEY, fundAccNo);
+    }
+    if (secAccNo) {
+      this.writeSessionValue(SECURITY_ACCOUNT_KEY, secAccNo);
+    }
+  }
+
+  clearStaffSession() {
+    this.staffToken = null;
+    this.removeSessionValue(STAFF_TOKEN_KEY);
+    this.removeSessionValue(STAFF_USERNAME_KEY);
+    this.removeSessionValue(STAFF_ID_KEY);
+  }
+
+  clearClientSession() {
+    this.clientToken = null;
+    this.removeSessionValue(CLIENT_TOKEN_KEY);
+    this.removeSessionValue(FUND_ACCOUNT_KEY);
+    this.removeSessionValue(SECURITY_ACCOUNT_KEY);
+  }
+
+  clearAllSessions() {
+    this.clearStaffSession();
+    this.clearClientSession();
+    this.removeSessionValue(CERTIFICATE_SUBJECT_TYPE_KEY);
+    this.removeSessionValue(CERTIFICATE_SUBJECT_KEY_KEY);
+    this.removeSessionValue(CERTIFICATE_LOGIN_MODE_KEY);
   }
 
   clearToken() {
-    this.token = null;
-    this.authToken = null;
-    localStorage.removeItem('stock_trading_token');
-    localStorage.removeItem('stock_trading_auth_token');
+    this.clearAllSessions();
   }
 
-  private getHeaders(isStaff: boolean = false): Record<string, string> {
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-    };
-    
-    if (isStaff) {
-      // 管理员使用 X-Staff-Auth-Token
-      const token = this.getToken();
-      if (token) {
-        headers['X-Staff-Auth-Token'] = token;
-      }
-    } else {
-      //
+  getLoginMode(): LoginMode | null {
+    if (this.isStaffLoggedIn()) return "admin";
+    if (this.isClientLoggedIn()) return "user";
+    return null;
+  }
+
+  isStaffLoggedIn() {
+    return Boolean(this.getStaffToken());
+  }
+
+  isClientLoggedIn() {
+    return Boolean(this.getClientToken());
+  }
+
+  getStaffUsername() {
+    return this.readSessionValue(STAFF_USERNAME_KEY) || "";
+  }
+
+  getStaffId() {
+    return this.readSessionValue(STAFF_ID_KEY) || "";
+  }
+
+  getCurrentFundAccountNo() {
+    return this.readSessionValue(FUND_ACCOUNT_KEY) || "";
+  }
+
+  getCurrentSecurityAccountNo() {
+    return this.readSessionValue(SECURITY_ACCOUNT_KEY) || "";
+  }
+
+  setPendingCertificate(subjectType: string, subjectKey: string, mode: LoginMode) {
+    this.writeSessionValue(CERTIFICATE_SUBJECT_TYPE_KEY, subjectType);
+    this.writeSessionValue(CERTIFICATE_SUBJECT_KEY_KEY, subjectKey);
+    this.writeSessionValue(CERTIFICATE_LOGIN_MODE_KEY, mode);
+  }
+
+  getPendingCertificate() {
+    const subjectType = this.readSessionValue(CERTIFICATE_SUBJECT_TYPE_KEY);
+    const subjectKey = this.readSessionValue(CERTIFICATE_SUBJECT_KEY_KEY);
+    const mode = this.readSessionValue(CERTIFICATE_LOGIN_MODE_KEY) as LoginMode | null;
+    if (!subjectType || !subjectKey || !mode) {
+      return null;
     }
-    
+    return { subjectType, subjectKey, mode };
+  }
+
+  clearPendingCertificate() {
+    this.removeSessionValue(CERTIFICATE_SUBJECT_TYPE_KEY);
+    this.removeSessionValue(CERTIFICATE_SUBJECT_KEY_KEY);
+    this.removeSessionValue(CERTIFICATE_LOGIN_MODE_KEY);
+  }
+
+  private buildHeaders(
+    requiresStaffAuth: boolean,
+    extraHeaders?: HeadersInit
+  ): Record<string, string> {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+
+    if (requiresStaffAuth) {
+      const token = this.getStaffToken();
+      if (!token) {
+        throw new ApiError("工作人员登录状态已失效，请重新登录", 1018);
+      }
+      headers["X-Staff-Auth-Token"] = token;
+    }
+
+    if (extraHeaders instanceof Headers) {
+      extraHeaders.forEach((value, key) => {
+        headers[key] = value;
+      });
+    } else if (Array.isArray(extraHeaders)) {
+      extraHeaders.forEach(([key, value]) => {
+        headers[key] = value;
+      });
+    } else if (extraHeaders) {
+      Object.assign(headers, extraHeaders);
+    }
+
     return headers;
   }
 
-  async request<T = any>(endpoint: string, options: RequestInit = {}, isStaff: boolean = false): Promise<T> {
+  private handleUnauthorized(message: string, requiresStaffAuth: boolean) {
+    if (requiresStaffAuth) {
+      this.clearStaffSession();
+      throw new ApiError(message || "工作人员登录状态已失效，请重新登录", 1018);
+    }
+    this.clearClientSession();
+    throw new ApiError(message || "登录状态已失效，请重新登录", 1018);
+  }
+
+  async request<T = any>(
+    endpoint: string,
+    options: RequestInit = {},
+    requiresStaffAuth = false
+  ): Promise<T> {
     const url = `${API_BASE}${endpoint}`;
     const response = await fetch(url, {
       ...options,
-      headers: {
-        ...this.getHeaders(isStaff),
-        ...(options.headers as Record<string, string> || {}),
-      },
+      headers: this.buildHeaders(requiresStaffAuth, options.headers),
     });
 
-    const data = await response.json();
+    let data: any = null;
+    try {
+      data = await response.json();
+    } catch {
+      data = null;
+    }
+
+    if (response.status === 401 || data?.code === 1018) {
+      return this.handleUnauthorized(data?.message, requiresStaffAuth);
+    }
 
     if (!response.ok) {
-      throw new Error(data.message || data.error || `HTTP Error: ${response.status}`);
+      throw new ApiError(data?.message || `HTTP Error: ${response.status}`, data?.code);
     }
 
-    // Java后端返回格式: {code, message, ...data}
-    if (data.code !== 0 && data.code !== undefined) {
-      throw new Error(data.message || '请求失败');
+    if (data?.code !== undefined && data.code !== 0) {
+      if (data.code === 1018) {
+        return this.handleUnauthorized(data.message, requiresStaffAuth);
+      }
+      throw new ApiError(data.message || "请求失败", data.code);
     }
 
-    return data;
+    return data as T;
   }
 
-  // ==================== Auth ====================
-  
-  // 用户登录 - Java后端: POST /api/external/fund/login
   async userLogin(fundAccNo: string, tradePassword: string) {
-    const data = await this.request('/external/fund/login', {
-      method: 'POST',
-      body: JSON.stringify({ fund_acc_no: fundAccNo, trade_password: tradePassword }),
+    const data = await this.request<any>("/external/fund/login", {
+      method: "POST",
+      body: JSON.stringify({
+        fund_acc_no: fundAccNo,
+        trade_password: tradePassword,
+      }),
     });
-    
-    // 保存auth_token
+
     if (data.auth_token) {
-      this.setAuthToken(data.auth_token);
+      this.clearStaffSession();
+      this.clearPendingCertificate();
+      this.setClientSession(data.auth_token, data.fund_acc_no, data.sec_acc_no);
     }
-    if (data.fund_acc_no) {
-      localStorage.setItem('fund_acc_no', data.fund_acc_no);
+
+    if (data.requires_certificate) {
+      this.clearAllSessions();
+      this.setPendingCertificate(data.certificate_subject_type, data.certificate_subject_key, "user");
     }
-    if (data.sec_acc_no) {
-      localStorage.setItem('sec_acc_no', data.sec_acc_no);
-    }
-    
+
     return data;
   }
 
-  // 管理员登录 - Java后端: POST /api/internal/staff/login
   async adminLogin(username: string, password: string) {
-    const data = await this.request('/internal/staff/login', {
-      method: 'POST',
+    const data = await this.request<any>("/internal/staff/login", {
+      method: "POST",
       body: JSON.stringify({ username, password }),
     });
-    
-    // 保存staff_auth_token (后端返回的是 auth_token)
+
     if (data.auth_token) {
-      this.setToken(data.auth_token);
+      this.clearClientSession();
+      this.clearPendingCertificate();
+      this.setStaffSession(data.auth_token, data.username, data.staff_id);
     }
-    
+
+    if (data.requires_certificate) {
+      this.clearAllSessions();
+      this.setPendingCertificate(data.certificate_subject_type, data.certificate_subject_key, "admin");
+    }
+
     return data;
   }
 
-  // ==================== User Fund Account (External API) ====================
-  
-  // 获取资金账户快照 - GET /api/external/fund/snapshot
-  async getFundSnapshot() {
-    const fundAccNo = localStorage.getItem('fund_acc_no') || '';
-    const authToken = this.getAuthToken() || '';
-    return this.request(`/external/fund/snapshot?fund_acc_no=${fundAccNo}&auth_token=${authToken}`);
+  async completeCertificate(certificateCode: string) {
+    const pending = this.getPendingCertificate();
+    if (!pending) {
+      throw new ApiError("没有待完成的首次登录认证");
+    }
+
+    const endpoint =
+      pending.mode === "admin"
+        ? "/internal/staff/complete-certificate"
+        : "/external/fund/complete-certificate";
+
+    const data = await this.request<any>(endpoint, {
+      method: "POST",
+      body: JSON.stringify({
+        subject_type: pending.subjectType,
+        subject_key: pending.subjectKey,
+        certificate_code: certificateCode,
+      }),
+    });
+
+    if (pending.mode === "admin" && data.auth_token) {
+      this.setStaffSession(data.auth_token, data.username, data.staff_id);
+      this.clearPendingCertificate();
+    }
+
+    if (pending.mode === "user" && data.auth_token) {
+      this.setClientSession(data.auth_token, data.fund_acc_no, data.sec_acc_no);
+      this.clearPendingCertificate();
+    }
+
+    return { ...data, mode: pending.mode };
   }
 
-  // 修改资金账户密码 - PUT /api/external/fund/password
-  async changePassword(oldPassword: string, newPassword: string, passwordType: 'trade' | 'withdraw') {
-    const fundAccNo = localStorage.getItem('fund_acc_no') || '';
-    return this.request('/external/fund/password', {
-      method: 'PUT',
-      body: JSON.stringify({ 
-        fund_acc_no: fundAccNo, 
-        old_password: oldPassword, 
+  async getFundSnapshot() {
+    const fundAccNo = this.getCurrentFundAccountNo();
+    const authToken = this.getClientToken();
+    if (!fundAccNo || !authToken) {
+      throw new ApiError("登录状态已失效，请重新登录", 1018);
+    }
+    return this.request<any>(
+      `/external/fund/snapshot?fund_acc_no=${encodeURIComponent(
+        fundAccNo
+      )}&auth_token=${encodeURIComponent(authToken)}`
+    );
+  }
+
+  async changePassword(oldPassword: string, newPassword: string, passwordType: "trade" | "withdraw") {
+    const fundAccNo = this.getCurrentFundAccountNo();
+    const authToken = this.getClientToken();
+    if (!fundAccNo || !authToken) {
+      throw new ApiError("登录状态已失效，请重新登录", 1018);
+    }
+
+    return this.request<any>("/external/fund/password", {
+      method: "PUT",
+      body: JSON.stringify({
+        fund_acc_no: fundAccNo,
+        auth_token: authToken,
+        old_password: oldPassword,
         new_password: newPassword,
-        password_type: passwordType 
+        password_type: passwordType,
       }),
     });
   }
 
-  // ==================== User Security Account (External API) ====================
-  
-  // 获取证券账户快照 - GET /api/external/security/snapshot
   async getSecuritySnapshot(stockCode?: string) {
-    const secAccNo = localStorage.getItem('sec_acc_no') || '';
-    const authToken = this.getAuthToken() || '';
-    let url = `/external/security/snapshot?sec_acc_no=${secAccNo}&auth_token=${authToken}`;
-    if (stockCode) {
-      url += `&stock_code=${stockCode}`;
+    const secAccNo = this.getCurrentSecurityAccountNo();
+    const authToken = this.getClientToken();
+    if (!secAccNo || !authToken) {
+      throw new ApiError("登录状态已失效，请重新登录", 1018);
     }
-    return this.request(url);
+
+    const stockParam = stockCode ? `&stock_code=${encodeURIComponent(stockCode)}` : "";
+    return this.request<any>(
+      `/external/security/snapshot?sec_acc_no=${encodeURIComponent(
+        secAccNo
+      )}&auth_token=${encodeURIComponent(authToken)}${stockParam}`
+    );
   }
 
   async getMyAccount() {
     return this.getFundSnapshot();
   }
 
-  // ==================== Admin - Fund Account (Internal API) ====================
-
-  // 获取资金账户列表 - GET /api/internal/fund/accounts/list
   async listFundAccounts() {
-    return this.request('/internal/fund/accounts/list', {}, true);
+    const response = await this.request<any>("/internal/fund/accounts/list", {}, true);
+    return response?.data ?? response;
   }
 
-  // 查询资金账户信息 - GET /api/internal/fund/accounts
-  async queryFundInfo(fundAccNo: string, idNumber: string, includeLogs: boolean = false) {
-    return this.request(`/internal/fund/accounts?fund_acc_no=${fundAccNo}&id_number=${idNumber}&include_logs=${includeLogs}`, {}, true);
+  async queryFundInfo(fundAccNo: string, idNumber: string, includeLogs = false) {
+    return this.request<any>(
+      `/internal/fund/accounts?fund_acc_no=${encodeURIComponent(
+        fundAccNo
+      )}&id_number=${encodeURIComponent(idNumber)}&include_logs=${includeLogs}`,
+      {},
+      true
+    );
   }
 
-  // 开设资金账户 - POST /api/internal/fund/accounts
+  async queryFundLogs(fundAccNo: string, idNumber: string, limit = 50) {
+    const response = await this.request<any>(
+      `/internal/fund/logs?fund_acc_no=${encodeURIComponent(
+        fundAccNo
+      )}&id_number=${encodeURIComponent(idNumber)}&limit=${limit}`,
+      {},
+      true
+    );
+    return response?.data ?? response;
+  }
+
   async createFundAccount(data: {
     sec_acc_no: string;
     id_number: string;
@@ -174,203 +404,221 @@ class ApiClient {
     trade_password: string;
     withdraw_password: string;
   }) {
-    return this.request('/internal/fund/accounts', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }, true);
+    return this.request<any>(
+      "/internal/fund/accounts",
+      {
+        method: "POST",
+        body: JSON.stringify(data),
+      },
+      true
+    );
   }
 
-  // 存款 - POST /api/internal/fund/deposit
-  async deposit(fundAccNo: string, amount: number, idNumber: string) {
-    return this.request('/internal/fund/deposit', {
-      method: 'POST',
-      body: JSON.stringify({ fund_acc_no: fundAccNo, amount, id_number: idNumber }),
-    }, true);
+  async deposit(fundAccNo: string, amount: number) {
+    return this.request<any>(
+      "/internal/fund/deposit",
+      {
+        method: "POST",
+        body: JSON.stringify({ fund_acc_no: fundAccNo, amount }),
+      },
+      true
+    );
   }
 
-  // 取款 - POST /api/internal/fund/withdraw
-  async withdraw(fundAccNo: string, amount: number, idNumber: string, withdrawPassword: string) {
-    return this.request('/internal/fund/withdraw', {
-      method: 'POST',
-      body: JSON.stringify({ 
-        fund_acc_no: fundAccNo, 
-        amount, 
-        id_number: idNumber,
-        withdraw_password: withdrawPassword 
-      }),
-    }, true);
+  async withdraw(fundAccNo: string, amount: number, withdrawPassword: string) {
+    return this.request<any>(
+      "/internal/fund/withdraw",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          fund_acc_no: fundAccNo,
+          amount,
+          withdraw_password: withdrawPassword,
+        }),
+      },
+      true
+    );
   }
 
-  // 修改资金账户密码（管理员）- PUT /api/internal/fund/password
-  async adminChangeFundPassword(fundAccNo: string, newPassword: string, passwordType: 'trade' | 'withdraw', idNumber: string) {
-    return this.request('/internal/fund/password', {
-      method: 'PUT',
-      body: JSON.stringify({ 
-        fund_acc_no: fundAccNo, 
-        new_password: newPassword,
-        password_type: passwordType,
-        id_number: idNumber
-      }),
-    }, true);
+  async adminChangeFundPassword(
+    fundAccNo: string,
+    oldPassword: string,
+    newPassword: string,
+    passwordType: "trade" | "withdraw"
+  ) {
+    return this.request<any>(
+      "/internal/fund/password",
+      {
+        method: "PUT",
+        body: JSON.stringify({
+          fund_acc_no: fundAccNo,
+          old_password: oldPassword,
+          new_password: newPassword,
+          password_type: passwordType,
+        }),
+      },
+      true
+    );
   }
 
-  // 挂失资金账户 - POST /api/internal/fund/accounts/loss
   async reportFundLoss(fundAccNo: string, reason: string, idNumber: string) {
-    return this.request('/internal/fund/accounts/loss', {
-      method: 'POST',
-      body: JSON.stringify({ fund_acc_no: fundAccNo, reason, id_number: idNumber }),
-    }, true);
+    return this.request<any>(
+      "/internal/fund/accounts/loss",
+      {
+        method: "POST",
+        body: JSON.stringify({ fund_acc_no: fundAccNo, reason, id_number: idNumber }),
+      },
+      true
+    );
   }
 
-  // 补办资金账户 - POST /api/internal/fund/accounts/reissue
-  async reissueFundAccount(oldFundAccNo: string, reason: string, idNumber: string, newTradePassword: string, newWithdrawPassword: string) {
-    return this.request('/internal/fund/accounts/reissue', {
-      method: 'POST',
-      body: JSON.stringify({ 
-        old_fund_acc_no: oldFundAccNo, 
-        reason, 
-        id_number: idNumber,
-        new_trade_password: newTradePassword,
-        new_withdraw_password: newWithdrawPassword
-      }),
-    }, true);
+  async reissueFundAccount(
+    oldFundAccNo: string,
+    idNumber: string,
+    newTradePassword: string,
+    newWithdrawPassword: string
+  ) {
+    return this.request<any>(
+      "/internal/fund/accounts/reissue",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          old_fund_acc_no: oldFundAccNo,
+          id_number: idNumber,
+          new_trade_password: newTradePassword,
+          new_withdraw_password: newWithdrawPassword,
+        }),
+      },
+      true
+    );
   }
 
-  // 销户资金账户 - POST /api/internal/fund/accounts/close
   async closeFundAccount(fundAccNo: string, reason: string, idNumber: string) {
-    return this.request('/internal/fund/accounts/close', {
-      method: 'POST',
-      body: JSON.stringify({ fund_acc_no: fundAccNo, reason, id_number: idNumber }),
-    }, true);
+    return this.request<any>(
+      "/internal/fund/accounts/close",
+      {
+        method: "POST",
+        body: JSON.stringify({ fund_acc_no: fundAccNo, reason, id_number: idNumber }),
+      },
+      true
+    );
   }
 
-  // 绑定证券账户 - POST /api/internal/fund/accounts/bind
   async bindSecurityAccount(fundAccNo: string, secAccNo: string) {
-    return this.request('/internal/fund/accounts/bind', {
-      method: 'POST',
-      body: JSON.stringify({ fund_acc_no: fundAccNo, sec_acc_no: secAccNo }),
-    }, true);
+    return this.request<any>(
+      "/internal/fund/accounts/bind",
+      {
+        method: "POST",
+        body: JSON.stringify({ fund_acc_no: fundAccNo, sec_acc_no: secAccNo }),
+      },
+      true
+    );
   }
 
-  // 解绑证券账户 - POST /api/internal/fund/accounts/unbind
   async unbindSecurityAccount(fundAccNo: string, secAccNo: string) {
-    return this.request('/internal/fund/accounts/unbind', {
-      method: 'POST',
-      body: JSON.stringify({ fund_acc_no: fundAccNo, sec_acc_no: secAccNo }),
-    }, true);
+    return this.request<any>(
+      "/internal/fund/accounts/unbind",
+      {
+        method: "POST",
+        body: JSON.stringify({ fund_acc_no: fundAccNo, sec_acc_no: secAccNo }),
+      },
+      true
+    );
   }
 
-  // ==================== Admin - Security Account (Internal API) ====================
-
-  // 获取证券账户列表 - GET /api/internal/security/accounts
   async listSecurityAccounts() {
-    return this.request('/internal/security/accounts', {}, true);
+    const response = await this.request<any>("/internal/security/accounts", {}, true);
+    return response?.data ?? response;
   }
 
-  // 开设证券账户 - POST /api/internal/security/accounts
-  async createSecuritiesAccount(data: {
-    id_number: string;
-    name: string;
-    type: 'individual' | 'corporate';
-    gender?: string;
-    address?: string;
-    phone?: string;
-    // 企业账户字段
-    legal_person_id?: string;
-    business_license_no?: string;
-    authorized_person_name?: string;
-    authorized_person_id?: string;
-  }) {
-    return this.request('/internal/security/accounts', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }, true);
+  async createSecuritiesAccount(data: Record<string, unknown>) {
+    return this.request<any>(
+      "/internal/security/accounts",
+      {
+        method: "POST",
+        body: JSON.stringify(data),
+      },
+      true
+    );
   }
 
-  // 挂失证券账户 - POST /api/internal/security/accounts/loss
   async reportSecurityLoss(secAccNo: string, reason: string, idNumber: string) {
-    return this.request('/internal/security/accounts/loss', {
-      method: 'POST',
-      body: JSON.stringify({ sec_acc_no: secAccNo, reason, id_number: idNumber }),
-    }, true);
+    return this.request<any>(
+      "/internal/security/accounts/loss",
+      {
+        method: "POST",
+        body: JSON.stringify({ sec_acc_no: secAccNo, reason, id_number: idNumber }),
+      },
+      true
+    );
   }
 
-  // 补办证券账户 - POST /api/internal/security/accounts/reissue
-  async reissueSecurityAccount(oldSecAccNo: string, reason: string, idNumber: string) {
-    return this.request('/internal/security/accounts/reissue', {
-      method: 'POST',
-      body: JSON.stringify({ old_sec_acc_no: oldSecAccNo, reason, id_number: idNumber }),
-    }, true);
+  async reissueSecurityAccount(oldSecAccNo: string, idNumber: string) {
+    return this.request<any>(
+      "/internal/security/accounts/reissue",
+      {
+        method: "POST",
+        body: JSON.stringify({ old_sec_acc_no: oldSecAccNo, id_number: idNumber }),
+      },
+      true
+    );
   }
 
-  // 销户证券账户 - POST /api/internal/security/accounts/close
   async closeSecurityAccount(secAccNo: string, reason: string, idNumber: string) {
-    return this.request('/internal/security/accounts/close', {
-      method: 'POST',
-      body: JSON.stringify({ sec_acc_no: secAccNo, reason, id_number: idNumber }),
-    }, true);
+    return this.request<any>(
+      "/internal/security/accounts/close",
+      {
+        method: "POST",
+        body: JSON.stringify({ sec_acc_no: secAccNo, reason, id_number: idNumber }),
+      },
+      true
+    );
   }
 
-  // 修改投资者信息 - PUT /api/internal/security/investors
-  async updateInvestorInfo(investorId: number, data: any) {
-    return this.request('/internal/security/investors', {
-      method: 'PUT',
-      body: JSON.stringify({ investor_id: investorId, ...data }),
-    }, true);
+  async updateInvestorInfo(investorId: number, data: Record<string, unknown>) {
+    return this.request<any>(
+      "/internal/security/investors",
+      {
+        method: "PUT",
+        body: JSON.stringify({ investor_id: investorId, ...data }),
+      },
+      true
+    );
   }
 
-  // ==================== Admin - Staff (Internal API) ====================
-
-  // 停用员工 - POST /api/internal/staff/deactivate
   async deactivateStaff(targetStaffId: number, reason: string) {
-    return this.request('/internal/staff/deactivate', {
-      method: 'POST',
-      body: JSON.stringify({ target_staff_id: targetStaffId, reason }),
-    }, true);
+    return this.request<any>(
+      "/internal/staff/deactivate",
+      {
+        method: "POST",
+        body: JSON.stringify({ target_staff_id: targetStaffId, reason }),
+      },
+      true
+    );
   }
 
-  // ==================== Admin - Audit (Internal API) ====================
-
-  // 查询操作日志 - GET /api/internal/audit/logs
-  async getOperationLogs(page = 1, limit = 50) {
-    return this.request(`/internal/audit/logs?page=${page}&limit=${limit}`, {}, true);
-  }
-
-  // ==================== Dashboard (Internal API) ====================
-
-  // 获取Dashboard统计数据 - GET /api/internal/dashboard/stats
   async getDashboardStats() {
-    return this.request('/internal/dashboard/stats', {}, true);
+    const response = await this.request<any>("/internal/dashboard/stats", {}, true);
+    return response?.data ?? response;
   }
 
-  // 获取最近操作日志 - GET /api/internal/dashboard/recent-logs
   async getRecentLogs(limit = 10) {
-    return this.request(`/internal/dashboard/recent-logs?limit=${limit}`, {}, true);
+    const response = await this.request<any>(`/internal/dashboard/recent-logs?limit=${limit}`, {}, true);
+    return response?.data ?? response;
   }
 
-  // ==================== Blacklist API (External - Trade Management System) ====================
-
-  // 黑名单查询 - GET /api/trade-management/blacklist/check
   async checkBlacklist(userName: string): Promise<boolean> {
-    try {
-      const response = await fetch(`${TRADE_MANAGEMENT_API_BASE}/blacklist/check?userName=${encodeURIComponent(userName)}`);
-      const data = await response.json();
-      if (data.success && data.data === true) {
-        return true; // 在黑名单中
-      }
-      return false; // 不在黑名单中
-    } catch (error) {
-      console.error('Blacklist check failed:', error);
-      return false; // 查询失败默认不在黑名单
+    const response = await fetch(
+      `${TRADE_MANAGEMENT_API_BASE}/blacklist/check?userName=${encodeURIComponent(userName)}`
+    );
+
+    if (!response.ok) {
+      throw new ApiError(`黑名单查询失败: HTTP ${response.status}`);
     }
-  }
 
-  async bankTransfer(direction: 'bank_to_securities' | 'securities_to_bank', amount: number, withdrawPassword: string) {
-    // Java 后端暂未提供银证转账接口，保留页面等待后续联调。
-    return { success: true, newBalance: 0 };
+    const data = await response.json();
+    return Boolean(data?.success && data?.data === true);
   }
-
 }
 
-// Singleton instance
 export const api = new ApiClient();

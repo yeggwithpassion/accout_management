@@ -20,6 +20,7 @@ public final class DaoRegistry {
     private final HoldingChangeLogDao holdingChangeLogDao;
     private final OperationLogDao operationLogDao;
     private final StaffDao staffDao;
+    private final LoginCertificateStateDao loginCertificateStateDao;
 
     public DaoRegistry(ConnectionProvider connectionProvider) {
         Objects.requireNonNull(connectionProvider, "connectionProvider");
@@ -33,6 +34,7 @@ public final class DaoRegistry {
         this.holdingChangeLogDao = new HoldingChangeLogDao(executor);
         this.operationLogDao = new OperationLogDao(executor);
         this.staffDao = new StaffDao(executor);
+        this.loginCertificateStateDao = new LoginCertificateStateDao(executor);
     }
 
     public static DaoRegistry forDriverManager(String url, String username, String password) {
@@ -73,6 +75,10 @@ public final class DaoRegistry {
 
     public StaffDao staffDao() {
         return staffDao;
+    }
+
+    public LoginCertificateStateDao loginCertificateStateDao() {
+        return loginCertificateStateDao;
     }
 
     public AccountBlacklistSupport blacklistSupport(BlacklistClient blacklistClient) {

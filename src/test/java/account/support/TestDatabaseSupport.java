@@ -36,6 +36,7 @@ public final class TestDatabaseSupport {
             statement.execute("drop table if exists holding");
             statement.execute("drop table if exists fund_transaction_log");
             statement.execute("drop table if exists fund_account");
+            statement.execute("drop table if exists login_certificate_state");
             statement.execute("drop table if exists security_account");
             statement.execute("drop table if exists staff");
             statement.execute("drop table if exists investor");
@@ -97,6 +98,18 @@ public final class TestDatabaseSupport {
                         last_interest_date date,
                         annual_interest_rate decimal(5,4) not null default 0.0035,
                         foreign key (sec_acc_no) references security_account(sec_acc_no)
+                    )
+                    """);
+            statement.execute("""
+                    create table login_certificate_state (
+                        state_id bigint auto_increment primary key,
+                        subject_type varchar(20) not null,
+                        subject_key varchar(50) not null,
+                        certificate_verified boolean not null default false,
+                        verified_at timestamp null,
+                        created_at timestamp default current_timestamp not null,
+                        updated_at timestamp default current_timestamp not null,
+                        unique(subject_type, subject_key)
                     )
                     """);
             statement.execute("""

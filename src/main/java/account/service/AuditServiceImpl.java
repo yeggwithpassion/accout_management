@@ -20,9 +20,11 @@ import java.util.Optional;
 public class AuditServiceImpl implements AuditService {
 
     private final DaoRegistry dao;
+    private final OperationLogViewMapper operationLogViewMapper;
 
-    public AuditServiceImpl(DaoRegistry dao) {
+    public AuditServiceImpl(DaoRegistry dao, OperationLogViewMapper operationLogViewMapper) {
         this.dao = dao;
+        this.operationLogViewMapper = operationLogViewMapper;
     }
 
     @Override
@@ -40,15 +42,7 @@ public class AuditServiceImpl implements AuditService {
         var logs = dao.operationLogDao().query(query);
 
         List<OperationLogView> logViews = logs.stream()
-                .map(log -> OperationLogView.builder()
-                        .logId(log.logId())
-                        .staffId(log.staffId())
-                        .operationType(log.operationType())
-                        .targetType(log.targetType())
-                        .targetId(log.targetId())
-                        .detail(log.detail())
-                        .operationTime(log.operationTime())
-                        .build())
+                .map(operationLogViewMapper::toView)
                 .toList();
 
         log.info("[queryOperationLog] staff_id={} time_from={} time_to={} count={}",

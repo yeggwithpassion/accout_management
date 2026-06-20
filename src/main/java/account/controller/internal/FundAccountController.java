@@ -9,6 +9,7 @@ import account.dto.ChangeFundPasswordRequest;
 import account.dto.CloseFundAccountRequest;
 import account.dto.CreateFundAccountRequest;
 import account.dto.DepositRequest;
+import account.dto.FundLogView;
 import account.dto.ReissueFundAccountRequest;
 import account.dto.ReportFundLossRequest;
 import account.dto.WithdrawRequest;
@@ -151,6 +152,19 @@ public class FundAccountController {
                 objectMapper,
                 fundAccountService.queryFundInfo(fundAccNo, idNumber, includeLogs, staffId),
                 "查询成功"
+        );
+    }
+
+    @GetMapping("/logs")
+    public Result<List<FundLogView>> queryFundLogs(
+            @RequestHeader(AuthHeaders.STAFF_AUTH_TOKEN) String authToken,
+            @RequestParam("fund_acc_no") @NotBlank String fundAccNo,
+            @RequestParam("id_number") @NotBlank String idNumber,
+            @RequestParam(value = "limit", defaultValue = "50") int limit) {
+        Integer staffId = requireStaffId(authToken);
+        log.info("[queryFundLogs] fund_acc_no={} limit={} staff_id={}", fundAccNo, limit, staffId);
+        return Result.success(
+                fundAccountService.queryFundLogs(fundAccNo, idNumber, limit, staffId)
         );
     }
 

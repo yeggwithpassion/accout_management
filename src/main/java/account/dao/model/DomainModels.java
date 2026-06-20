@@ -82,6 +82,17 @@ public final class DomainModels {
     ) {
     }
 
+    public record LoginCertificateState(
+            Long stateId,
+            String subjectType,
+            String subjectKey,
+            boolean certificateVerified,
+            LocalDateTime verifiedAt,
+            LocalDateTime createdAt,
+            LocalDateTime updatedAt
+    ) {
+    }
+
     public record Holding(
             Long holdingId,
             String secAccNo,

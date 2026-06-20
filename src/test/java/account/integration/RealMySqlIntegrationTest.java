@@ -183,18 +183,7 @@ class RealMySqlIntegrationTest {
                                 """.formatted(fundAccNo)))
                 .andExpect(status().isOk());
 
-        JsonNode loginJson = readJson(mockMvc.perform(post("/api/external/fund/login")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "fund_acc_no": "%s",
-                                  "trade_password": "trade123"
-                                }
-                                """.formatted(fundAccNo)))
-                .andExpect(status().isOk())
-                .andReturn());
-        assertEquals(0, loginJson.get("code").asInt());
-        String clientToken = loginJson.get("auth_token").asText();
+        String clientToken = clientLoginAndGetToken(fundAccNo, "trade123");
         assertNotNull(clientToken);
 
         JsonNode tradeFreezeJson = readJson(mockMvc.perform(post("/api/external/trade/fund-balance")
@@ -312,7 +301,8 @@ class RealMySqlIntegrationTest {
                                 """))
                 .andExpect(status().isOk())
                 .andReturn());
-        assertEquals(1021, securityLossJson.get("code").asInt());
+        assertEquals(0, securityLossJson.get("code").asInt());
+        assertEquals(DomainEnums.AccountStatus.LOSS_FROZEN, registry.securityAccountDao().findByAccountNo("SA_MYSQL_010").orElseThrow().status());
 
         registry.transactionManager().execute(connection -> {
             registry.holdingDao().saveOrUpdate(connection, new DomainModels.Holding(
@@ -425,17 +415,7 @@ class RealMySqlIntegrationTest {
                 .andReturn());
         assertEquals(0, staffPasswordChange.get("code").asInt());
 
-        JsonNode loginJson = readJson(mockMvc.perform(post("/api/external/fund/login")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "fund_acc_no": "FA_MYSQL_020",
-                                  "trade_password": "trade999"
-                                }
-                                """))
-                .andExpect(status().isOk())
-                .andReturn());
-        String clientToken = loginJson.get("auth_token").asText();
+        String clientToken = clientLoginAndGetToken("FA_MYSQL_020", "trade999");
 
         JsonNode clientPasswordChange = readJson(mockMvc.perform(put("/api/external/fund/password")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -776,7 +756,60 @@ class RealMySqlIntegrationTest {
                 .andReturn();
         JsonNode loginJson = readJson(loginResult);
         assertEquals(0, loginJson.get("code").asInt());
-        return loginJson.get("auth_token").asText();
+        if (loginJson.hasNonNull("auth_token")) {
+            return loginJson.get("auth_token").asText();
+        }
+        assertTrue(loginJson.get("requires_certificate").asBoolean());
+
+        JsonNode certificateJson = readJson(mockMvc.perform(post("/api/internal/staff/complete-certificate")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "subject_type": "%s",
+                                  "subject_key": "%s",
+                                  "certificate_code": "CERT-123456"
+                                }
+                                """.formatted(
+                                        loginJson.get("certificate_subject_type").asText(),
+                                        loginJson.get("certificate_subject_key").asText())))
+                .andExpect(status().isOk())
+                .andReturn());
+        assertEquals(0, certificateJson.get("code").asInt());
+        return certificateJson.get("auth_token").asText();
+    }
+
+    private String clientLoginAndGetToken(String fundAccNo, String tradePassword) throws Exception {
+        JsonNode loginJson = readJson(mockMvc.perform(post("/api/external/fund/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "fund_acc_no": "%s",
+                                  "trade_password": "%s"
+                                }
+                                """.formatted(fundAccNo, tradePassword)))
+                .andExpect(status().isOk())
+                .andReturn());
+        assertEquals(0, loginJson.get("code").asInt());
+        if (loginJson.hasNonNull("auth_token")) {
+            return loginJson.get("auth_token").asText();
+        }
+        assertTrue(loginJson.get("requires_certificate").asBoolean());
+
+        JsonNode certificateJson = readJson(mockMvc.perform(post("/api/external/fund/complete-certificate")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "subject_type": "%s",
+                                  "subject_key": "%s",
+                                  "certificate_code": "CERT-123456"
+                                }
+                                """.formatted(
+                                        loginJson.get("certificate_subject_type").asText(),
+                                        loginJson.get("certificate_subject_key").asText())))
+                .andExpect(status().isOk())
+                .andReturn());
+        assertEquals(0, certificateJson.get("code").asInt());
+        return certificateJson.get("auth_token").asText();
     }
 
     private JsonNode readJson(MvcResult result) throws Exception {

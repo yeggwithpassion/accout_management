@@ -8,6 +8,7 @@ DROP TABLE IF EXISTS holding_change_log;
 DROP TABLE IF EXISTS holding;
 DROP TABLE IF EXISTS fund_transaction_log;
 DROP TABLE IF EXISTS fund_account;
+DROP TABLE IF EXISTS login_certificate_state;
 DROP TABLE IF EXISTS security_account;
 DROP TABLE IF EXISTS staff;
 DROP TABLE IF EXISTS investor;
@@ -67,6 +68,17 @@ CREATE TABLE fund_account (
     annual_interest_rate DECIMAL(5,4) NOT NULL DEFAULT 0.0035,
     CONSTRAINT fk_fund_security
         FOREIGN KEY (sec_acc_no) REFERENCES security_account(sec_acc_no)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE login_certificate_state (
+    state_id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    subject_type VARCHAR(20) NOT NULL,
+    subject_key VARCHAR(50) NOT NULL,
+    certificate_verified TINYINT(1) NOT NULL DEFAULT 0,
+    verified_at DATETIME NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_login_certificate_subject (subject_type, subject_key)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 ALTER TABLE security_account

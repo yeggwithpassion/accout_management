@@ -1,11 +1,19 @@
-import { useState, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router";
+import { ArrowRightLeft, RefreshCw, Wallet } from "lucide-react";
 import { Button } from "../../components/ui/button";
-import { Wallet, ArrowRightLeft, RefreshCw } from "lucide-react";
-import { api } from "../../lib/api";
+import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
+import { api, ApiError } from "../../lib/api";
+
+type AccountSnapshot = {
+  fundAccNo: string;
+  availableBalance: number;
+  frozenBalance: number;
+};
 
 export default function Transfer() {
-  const [account, setAccount] = useState<any>(null);
+  const navigate = useNavigate();
+  const [account, setAccount] = useState<AccountSnapshot | null>(null);
   const [direction, setDirection] = useState<"bank_to_securities" | "securities_to_bank">("bank_to_securities");
   const [amount, setAmount] = useState("");
   const [withdrawPassword, setWithdrawPassword] = useState("");
@@ -15,15 +23,23 @@ export default function Transfer() {
   const [messageType, setMessageType] = useState<"success" | "error">("success");
 
   useEffect(() => {
-    loadAccount();
+    void loadAccount();
   }, []);
 
   const loadAccount = async () => {
     setLoading(true);
     try {
       const data = await api.getMyAccount();
-      setAccount(data);
+      setAccount({
+        fundAccNo: data.fund_acc_no || api.getCurrentFundAccountNo(),
+        availableBalance: Number(data.available_balance || 0),
+        frozenBalance: Number(data.frozen_balance || 0),
+      });
     } catch (err: any) {
+      if (err instanceof ApiError && err.code === 1018) {
+        navigate("/login", { replace: true, state: { mode: "user" } });
+        return;
+      }
       showMessage(err.message || "加载账户失败", "error");
     } finally {
       setLoading(false);
@@ -33,58 +49,42 @@ export default function Transfer() {
   const showMessage = (msg: string, type: "success" | "error") => {
     setMessage(msg);
     setMessageType(type);
-    setTimeout(() => setMessage(""), 5000);
+    window.setTimeout(() => setMessage(""), 5000);
   };
 
   const handleTransfer = async () => {
-    if (!amount || !withdrawPassword) {
-      showMessage("请填写完整的转账信息", "error");
+    if (!amount) {
+      showMessage("请输入转账金额", "error");
       return;
     }
 
     const numAmount = Number(amount);
-    if (numAmount <= 0) {
-      showMessage("转账金额必须大于0", "error");
+    if (!Number.isFinite(numAmount) || numAmount <= 0) {
+      showMessage("转账金额必须大于 0", "error");
       return;
     }
 
-    // 证转银时检查余额
     if (direction === "securities_to_bank") {
-      const availableBalance = account?.availableBalance || account?.balance || 0;
-      if (numAmount > availableBalance) {
-        showMessage("转出金额不能超过可用余额", "error");
+      if (!withdrawPassword || withdrawPassword.length !== 6) {
+        showMessage("请输入 6 位取款密码", "error");
+        return;
+      }
+      if (numAmount > Number(account?.availableBalance || 0)) {
+        showMessage("转出金额不能超过当前可用余额", "error");
         return;
       }
     }
 
     setSubmitting(true);
     try {
-      // 银转证调用存款API，证转银调用取款API
-      let result;
-      if (direction === "bank_to_securities") {
-        // 银转证 - 需要资金账号和身份证号
-        const fundAccNo = localStorage.getItem('fund_acc_no') || '';
-        result = await api.deposit(fundAccNo, numAmount, '');
-      } else {
-        // 证转银 - 需要资金账号、金额、身份证号、取款密码
-        const fundAccNo = localStorage.getItem('fund_acc_no') || '';
-        const idNumber = localStorage.getItem('id_number') || '';
-        result = await api.withdraw(fundAccNo, numAmount, idNumber, withdrawPassword);
-      }
-      
-      if (result.code === 0) {
-        const balanceAfter = result.available_balance || result.data?.available_balance || 0;
-        showMessage(
-          `转账成功！${direction === "bank_to_securities" ? "转入" : "转出"} ${numAmount.toLocaleString()} 元`,
-          "success"
-        );
-        setAmount("");
-        setWithdrawPassword("");
-        loadAccount();
-      } else {
-        showMessage(result.message || "转账失败", "error");
-      }
+      // 当前后端仍未提供真正的投资者银证转账接口。
+      // 第二轮测试先保证余额展示、登录态和交互提示正确，避免误调内部柜台接口。
+      throw new ApiError("当前版本暂未开放投资者自助银证转账接口，请通过柜台办理");
     } catch (err: any) {
+      if (err instanceof ApiError && err.code === 1018) {
+        navigate("/login", { replace: true, state: { mode: "user" } });
+        return;
+      }
       showMessage(err.message || "转账失败", "error");
     } finally {
       setSubmitting(false);
@@ -93,82 +93,90 @@ export default function Transfer() {
 
   if (loading) {
     return (
-      <div className="space-y-6 max-w-6xl mx-auto">
+      <div className="mx-auto max-w-6xl space-y-6">
         <h2 className="text-2xl font-bold">银证转账</h2>
-        <div className="flex items-center justify-center h-64">
-          <RefreshCw className="w-6 h-6 animate-spin text-red-600" />
+        <div className="flex h-64 items-center justify-center">
+          <RefreshCw className="h-6 w-6 animate-spin text-red-600" />
         </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto">
+    <div className="mx-auto max-w-6xl space-y-6">
       <div className="flex flex-col gap-2">
         <h2 className="text-2xl font-bold tracking-tight text-slate-900">银证转账</h2>
-        <p className="text-slate-500">银行账户与证券资金账户之间资金划转</p>
+        <p className="text-slate-500">查看资金账户可用余额，并准备后续银证转账联调</p>
       </div>
 
       {message && (
-        <div className={`p-4 rounded-md ${messageType === "success" ? "bg-green-50 border border-green-200 text-green-700" : "bg-red-50 border border-red-200 text-red-600"}`}>
+        <div
+          className={`rounded-md p-4 ${
+            messageType === "success"
+              ? "border border-green-200 bg-green-50 text-green-700"
+              : "border border-red-200 bg-red-50 text-red-600"
+          }`}
+        >
           {message}
         </div>
       )}
 
       <div className="grid gap-6 md:grid-cols-2">
-        {/* Account Info */}
-        <Card className="shadow-sm border-slate-200">
+        <Card className="border-slate-200 shadow-sm">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Wallet className="w-5 h-5 text-red-600" />
+              <Wallet className="h-5 w-5 text-red-600" />
               <span>账户信息</span>
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              <div className="flex justify-between py-2 border-b">
+              <div className="flex justify-between border-b py-2">
                 <span className="text-slate-500">资金账号</span>
-                <span className="font-mono font-medium">{account?.accountNo}</span>
+                <span className="font-mono font-medium">{account?.fundAccNo}</span>
               </div>
-              <div className="flex justify-between py-2 border-b">
-                <span className="text-slate-500">持有人</span>
-                <span>{account?.name}</span>
-              </div>
-              <div className="flex justify-between py-2 border-b">
+              <div className="flex justify-between border-b py-2">
                 <span className="text-slate-500">可用资金</span>
                 <span className="font-mono font-semibold text-red-600">
-                  {(account?.availableBalance || account?.balance || 0).toLocaleString("zh-CN", { minimumFractionDigits: 2 })}
+                  {Number(account?.availableBalance || 0).toLocaleString("zh-CN", {
+                    minimumFractionDigits: 2,
+                  })}
                 </span>
               </div>
               <div className="flex justify-between py-2">
                 <span className="text-slate-500">冻结资金</span>
                 <span className="font-mono text-slate-500">
-                  {(account?.frozenBalance || account?.frozenAmount || 0).toLocaleString("zh-CN", { minimumFractionDigits: 2 })}
+                  {Number(account?.frozenBalance || 0).toLocaleString("zh-CN", {
+                    minimumFractionDigits: 2,
+                  })}
                 </span>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        {/* Transfer Form */}
-        <Card className="shadow-sm border-slate-200">
+        <Card className="border-slate-200 shadow-sm">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <ArrowRightLeft className="w-5 h-5 text-red-600" />
+              <ArrowRightLeft className="h-5 w-5 text-red-600" />
               <span>转账操作</span>
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              <div className="flex gap-3 mb-4">
+              <div className="mb-4 flex gap-3">
                 <Button
-                  className={`flex-1 ${direction === "bank_to_securities" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"}`}
+                  className={`flex-1 ${
+                    direction === "bank_to_securities" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"
+                  }`}
                   onClick={() => setDirection("bank_to_securities")}
                 >
                   银转证
                 </Button>
                 <Button
-                  className={`flex-1 ${direction === "securities_to_bank" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"}`}
+                  className={`flex-1 ${
+                    direction === "securities_to_bank" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"
+                  }`}
                   onClick={() => setDirection("securities_to_bank")}
                 >
                   证转银
@@ -176,7 +184,7 @@ export default function Transfer() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
+                <label className="mb-1 block text-sm font-medium text-slate-700">
                   {direction === "bank_to_securities" ? "转入金额" : "转出金额"}
                 </label>
                 <input
@@ -185,29 +193,38 @@ export default function Transfer() {
                   min="0"
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+                  className="w-full rounded-md border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-red-500"
                   placeholder="请输入金额"
                 />
                 {direction === "securities_to_bank" && account && (
-                  <p className="text-xs text-slate-400 mt-1">
-                    最大可转出: {(account.availableBalance || account.balance || 0).toLocaleString("zh-CN", { minimumFractionDigits: 2 })} 元
+                  <p className="mt-1 text-xs text-slate-400">
+                    最大可转出：
+                    {Number(account.availableBalance).toLocaleString("zh-CN", {
+                      minimumFractionDigits: 2,
+                    })}
+                    元
                   </p>
                 )}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">取款密码</label>
+                <label className="mb-1 block text-sm font-medium text-slate-700">取款密码</label>
                 <input
                   type="password"
                   value={withdrawPassword}
                   onChange={(e) => setWithdrawPassword(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
-                  placeholder="请输入取款密码"
+                  className="w-full rounded-md border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-red-500"
+                  placeholder="请输入 6 位取款密码"
+                  maxLength={6}
                 />
               </div>
 
+              <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm text-slate-500">
+                当前版本仅支持展示余额与校验输入，真实投资者银证转账接口仍待后端联调开放。
+              </div>
+
               <Button
-                className="w-full bg-red-600 hover:bg-red-700 text-white"
+                className="w-full bg-red-600 text-white hover:bg-red-700"
                 onClick={handleTransfer}
                 disabled={submitting}
               >

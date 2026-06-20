@@ -1,13 +1,15 @@
 import { useState } from "react";
-import { Key, Eye, EyeOff, Lock } from "lucide-react";
+import { useNavigate } from "react-router";
+import { Eye, EyeOff, Key, Lock } from "lucide-react";
 import { Button } from "../../components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../../components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
-import { api } from "../../lib/api";
+import { api, ApiError } from "../../lib/api";
 
 export default function ChangePassword() {
-  const [passwordType, setPasswordType] = useState<'trade' | 'withdraw'>('trade');
+  const navigate = useNavigate();
+  const [passwordType, setPasswordType] = useState<"trade" | "withdraw">("trade");
   const [oldPassword, setOldPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -21,13 +23,12 @@ export default function ChangePassword() {
     setError("");
     setSuccess("");
 
-    // 验证
     if (!oldPassword || oldPassword.length !== 6) {
-      setError("请输入6位原密码");
+      setError("请输入 6 位原密码");
       return;
     }
     if (!newPassword || newPassword.length !== 6) {
-      setError("新密码必须为6位数字");
+      setError("新密码必须为 6 位数字");
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -41,16 +42,16 @@ export default function ChangePassword() {
 
     setLoading(true);
     try {
-      const result = await api.changePassword(oldPassword, newPassword, passwordType);
-      if (result.code === 0) {
-        setSuccess(`${passwordType === 'trade' ? '交易' : '取款'}密码修改成功！`);
-        setOldPassword("");
-        setNewPassword("");
-        setConfirmPassword("");
-      } else {
-        setError(result.message || "密码修改失败");
-      }
+      await api.changePassword(oldPassword, newPassword, passwordType);
+      setSuccess(`${passwordType === "trade" ? "交易" : "取款"}密码修改成功`);
+      setOldPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
     } catch (err: any) {
+      if (err instanceof ApiError && err.code === 1018) {
+        navigate("/login", { replace: true, state: { mode: "user" } });
+        return;
+      }
       setError(err.message || "密码修改失败，请检查原密码是否正确");
     } finally {
       setLoading(false);
@@ -58,7 +59,7 @@ export default function ChangePassword() {
   };
 
   return (
-    <div className="space-y-6 max-w-2xl mx-auto">
+    <div className="mx-auto max-w-2xl space-y-6">
       <div>
         <h2 className="text-2xl font-bold tracking-tight text-slate-900">修改密码</h2>
         <p className="text-slate-500">修改您的交易密码或取款密码</p>
@@ -67,55 +68,51 @@ export default function ChangePassword() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Lock className="w-5 h-5 text-red-600" />
+            <Lock className="h-5 w-5 text-red-600" />
             密码修改
           </CardTitle>
-          <CardDescription>
-            请选择要修改的密码类型，并输入原密码和新密码
-          </CardDescription>
+          <CardDescription>请选择要修改的密码类型，并输入原密码和新密码</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          {/* 密码类型选择 */}
           <div className="space-y-2">
             <Label>密码类型</Label>
             <div className="flex gap-4">
               <button
-                onClick={() => setPasswordType('trade')}
-                className={`flex-1 py-3 px-4 rounded-lg border-2 transition-all ${
-                  passwordType === 'trade'
-                    ? 'border-red-600 bg-red-50 text-red-700'
-                    : 'border-slate-200 hover:border-red-300'
+                onClick={() => setPasswordType("trade")}
+                className={`flex-1 rounded-lg border-2 px-4 py-3 transition-all ${
+                  passwordType === "trade"
+                    ? "border-red-600 bg-red-50 text-red-700"
+                    : "border-slate-200 hover:border-red-300"
                 }`}
+                type="button"
               >
                 <div className="font-medium">交易密码</div>
-                <div className="text-xs text-slate-500 mt-1">用于登录和交易</div>
+                <div className="mt-1 text-xs text-slate-500">用于登录和交易</div>
               </button>
               <button
-                onClick={() => setPasswordType('withdraw')}
-                className={`flex-1 py-3 px-4 rounded-lg border-2 transition-all ${
-                  passwordType === 'withdraw'
-                    ? 'border-red-600 bg-red-50 text-red-700'
-                    : 'border-slate-200 hover:border-red-300'
+                onClick={() => setPasswordType("withdraw")}
+                className={`flex-1 rounded-lg border-2 px-4 py-3 transition-all ${
+                  passwordType === "withdraw"
+                    ? "border-red-600 bg-red-50 text-red-700"
+                    : "border-slate-200 hover:border-red-300"
                 }`}
+                type="button"
               >
                 <div className="font-medium">取款密码</div>
-                <div className="text-xs text-slate-500 mt-1">用于资金提取</div>
+                <div className="mt-1 text-xs text-slate-500">用于资金提取</div>
               </button>
             </div>
           </div>
 
-          {/* 原密码 */}
           <div className="space-y-2">
-            <Label htmlFor="oldPassword">
-              原{passwordType === 'trade' ? '交易' : '取款'}密码
-            </Label>
+            <Label htmlFor="oldPassword">原{passwordType === "trade" ? "交易" : "取款"}密码</Label>
             <div className="relative">
               <Input
                 id="oldPassword"
                 type={showOldPassword ? "text" : "password"}
                 value={oldPassword}
                 onChange={(e) => setOldPassword(e.target.value)}
-                placeholder="请输入6位原密码"
+                placeholder="请输入 6 位原密码"
                 maxLength={6}
                 className="pr-10"
               />
@@ -124,23 +121,20 @@ export default function ChangePassword() {
                 onClick={() => setShowOldPassword(!showOldPassword)}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
               >
-                {showOldPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                {showOldPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
             </div>
           </div>
 
-          {/* 新密码 */}
           <div className="space-y-2">
-            <Label htmlFor="newPassword">
-              新{passwordType === 'trade' ? '交易' : '取款'}密码
-            </Label>
+            <Label htmlFor="newPassword">新{passwordType === "trade" ? "交易" : "取款"}密码</Label>
             <div className="relative">
               <Input
                 id="newPassword"
                 type={showNewPassword ? "text" : "password"}
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="请输入6位新密码"
+                placeholder="请输入 6 位新密码"
                 maxLength={6}
                 className="pr-10"
               />
@@ -149,13 +143,12 @@ export default function ChangePassword() {
                 onClick={() => setShowNewPassword(!showNewPassword)}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
               >
-                {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
             </div>
-            <p className="text-xs text-slate-500">密码必须为6位数字</p>
+            <p className="text-xs text-slate-500">密码必须为 6 位数字</p>
           </div>
 
-          {/* 确认新密码 */}
           <div className="space-y-2">
             <Label htmlFor="confirmPassword">确认新密码</Label>
             <Input
@@ -168,37 +161,24 @@ export default function ChangePassword() {
             />
           </div>
 
-          {/* 错误和成功提示 */}
-          {error && (
-            <div className="p-3 bg-red-50 border border-red-200 rounded-md text-red-600 text-sm">
-              {error}
-            </div>
-          )}
+          {error && <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-600">{error}</div>}
           {success && (
-            <div className="p-3 bg-green-50 border border-green-200 rounded-md text-green-600 text-sm">
-              {success}
-            </div>
+            <div className="rounded-md border border-green-200 bg-green-50 p-3 text-sm text-green-600">{success}</div>
           )}
 
-          {/* 提交按钮 */}
-          <Button
-            className="w-full bg-red-600 hover:bg-red-700"
-            onClick={handleSubmit}
-            disabled={loading}
-          >
+          <Button className="w-full bg-red-600 hover:bg-red-700" onClick={handleSubmit} disabled={loading}>
             {loading ? "修改中..." : "确认修改"}
           </Button>
         </CardContent>
       </Card>
 
-      {/* 密码安全提示 */}
-      <Card className="bg-slate-50 border-slate-200">
+      <Card className="border-slate-200 bg-slate-50">
         <CardContent className="pt-6">
-          <h3 className="font-medium text-slate-900 mb-2 flex items-center gap-2">
-            <Key className="w-4 h-4" />
+          <h3 className="mb-2 flex items-center gap-2 font-medium text-slate-900">
+            <Key className="h-4 w-4" />
             密码安全提示
           </h3>
-          <ul className="text-sm text-slate-600 space-y-1 list-disc list-inside">
+          <ul className="list-inside list-disc space-y-1 text-sm text-slate-600">
             <li>交易密码用于登录系统和进行证券交易</li>
             <li>取款密码用于从资金账户提取现金</li>
             <li>建议定期更换密码，避免使用简单数字组合</li>

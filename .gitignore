@@ -21,10 +21,18 @@ Thumbs.db
 # Logs
 *.log
 sourcecode/target/
+logs/
 
 # frontend
 frontend/node_modules
+frontend/dist/
+frontend/test-results/
+frontend/playwright-report/
 
 # MACOS
 .DS_Store
 **/.DS_Store
+
+# local automation / temp
+scripts/run-full-regression.ps1
+scripts/mysql_clear_business_data.sql

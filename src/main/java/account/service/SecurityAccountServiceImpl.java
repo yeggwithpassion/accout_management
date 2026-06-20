@@ -21,6 +21,7 @@ import account.dto.UpdateInvestorInfoRequest;
 import account.dto.UpdateSecurityHoldingRequest;
 import account.enums.AccountStatus;
 import account.integration.BlacklistClient;
+import account.integration.BlacklistClientException;
 import account.service.api.ClientAuthTokenService;
 import account.service.api.SecurityAccountService;
 import java.math.BigDecimal;
@@ -58,13 +59,8 @@ public class SecurityAccountServiceImpl implements SecurityAccountService {
     public SecurityAccountCreatedResponse createSecurityAccount(CreateSecurityAccountRequest request) {
         validateInvestorEligibility(request);
 
-        // 黑名单检查（服务不可用时跳过）
-        try {
-            if (dao.blacklistSupport(blacklistClient).isBlockedByUserName(request.getName())) {
-                throw new BusinessException(ErrorCode.ERR_012, "投资者在黑名单中，无法开立证券账户");
-            }
-        } catch (Exception e) {
-            log.warn("Blacklist check failed for user '{}', continuing with account creation: {}", request.getName(), e.getMessage());
+        if (isBlacklistedByUserName(request.getName())) {
+            throw new BusinessException(ErrorCode.ERR_012, "投资者在黑名单中，无法开立证券账户");
         }
 
         return dao.transactionManager().execute(connection -> {
@@ -146,6 +142,7 @@ public class SecurityAccountServiceImpl implements SecurityAccountService {
                 throw new BusinessException(ErrorCode.ERR_021, "证券账户已销户，无法挂失");
             }
 
+            freezeAllHoldings(connection, request.getSecAccNo());
             dao.securityAccountDao().updateStatus(connection, request.getSecAccNo(), DomainEnums.AccountStatus.LOSS_FROZEN);
             dao.operationLogDao().create(connection, new DomainModels.OperationLog(
                     null,
@@ -193,12 +190,14 @@ public class SecurityAccountServiceImpl implements SecurityAccountService {
                         newSecAccNo,
                         holding.stockCode(),
                         holding.stockName(),
-                        holding.quantity(),
-                        holding.frozenQuantity(),
+                        holding.quantity() + holding.frozenQuantity(),
+                        0,
                         holding.avgCost(),
                         LocalDateTime.now()
                 ));
             }
+
+            dao.holdingDao().deleteBySecurityAccountNo(connection, request.getOldSecAccNo());
 
             if (oldAccount.linkedFundAcc() != null && !oldAccount.linkedFundAcc().isBlank()) {
                 dao.fundAccountDao().relinkSecurityAccount(connection, oldAccount.linkedFundAcc(), newSecAccNo);
@@ -244,6 +243,7 @@ public class SecurityAccountServiceImpl implements SecurityAccountService {
 
             if (account.linkedFundAcc() != null && !account.linkedFundAcc().isBlank()) {
                 dao.securityAccountDao().unbindFundAccount(connection, request.getSecAccNo());
+                dao.fundAccountDao().relinkSecurityAccount(connection, account.linkedFundAcc(), null);
             }
 
             dao.securityAccountDao().updateStatus(connection, request.getSecAccNo(), DomainEnums.AccountStatus.CLOSED);
@@ -339,6 +339,21 @@ public class SecurityAccountServiceImpl implements SecurityAccountService {
                     .agentIdNumber(updatedInvestor.agentIdNumber())
                     .build();
         });
+    }
+
+    private void freezeAllHoldings(java.sql.Connection connection, String secAccNo) {
+        for (var holding : dao.holdingDao().listBySecurityAccountNo(secAccNo)) {
+            dao.holdingDao().saveOrUpdate(connection, new DomainModels.Holding(
+                    holding.holdingId(),
+                    holding.secAccNo(),
+                    holding.stockCode(),
+                    holding.stockName(),
+                    0,
+                    holding.quantity() + holding.frozenQuantity(),
+                    holding.avgCost(),
+                    LocalDateTime.now()
+            ));
+        }
     }
 
     @Override
@@ -515,11 +530,38 @@ public class SecurityAccountServiceImpl implements SecurityAccountService {
     }
 
     private void validateInvestorEligibility(CreateSecurityAccountRequest request) {
-        if (!"个人".equals(request.getInvestorType())) {
-            throw new BusinessException(ErrorCode.ERR_019, "当前仅支持个人投资者开户，法人账户暂不支持");
+        if ("个人".equals(request.getInvestorType())) {
+            if (!isAdultByIdCard(request.getIdType(), request.getIdNumber())) {
+                throw new BusinessException(ErrorCode.ERR_019, "未成年人不得开立证券账户");
+            }
+            if (!isBlank(request.getAgentName()) && isBlank(request.getAgentIdNumber())) {
+                throw new BusinessException(ErrorCode.PARAM_INVALID, "代办开户时必须提供代办人证件号码");
+            }
+            if (isBlank(request.getAgentName()) && !isBlank(request.getAgentIdNumber())) {
+                throw new BusinessException(ErrorCode.PARAM_INVALID, "代办开户时必须提供代办人姓名");
+            }
+            return;
         }
-        if (!isAdultByIdCard(request.getIdType(), request.getIdNumber())) {
-            throw new BusinessException(ErrorCode.ERR_019, "未成年人不得开立证券账户");
+
+        if ("法人".equals(request.getInvestorType())) {
+            requireField(request.getLegalNumber(), "legal_number");
+            requireField(request.getBusinessLicense(), "business_license");
+            requireField(request.getAuthorizeName(), "authorize_name");
+            requireField(request.getAuthorizePhone(), "authorize_phone");
+            requireField(request.getAuthorizeAddress(), "authorize_address");
+            requireField(request.getExecutorName(), "executor_name");
+            return;
+        }
+
+        throw new BusinessException(ErrorCode.ERR_019, "投资者类型仅支持个人或法人");
+    }
+
+    private boolean isBlacklistedByUserName(String userName) {
+        try {
+            return dao.blacklistSupport(blacklistClient).isBlockedByUserName(userName);
+        } catch (BlacklistClientException e) {
+            log.warn("Blacklist check failed for user '{}': {}", userName, e.getMessage());
+            return false;
         }
     }
 
@@ -568,6 +610,16 @@ public class SecurityAccountServiceImpl implements SecurityAccountService {
             return currentValue;
         }
         return requestValue.isBlank() ? null : requestValue;
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.isBlank();
+    }
+
+    private void requireField(String value, String fieldName) {
+        if (isBlank(value)) {
+            throw new BusinessException(ErrorCode.PARAM_INVALID, fieldName + " cannot be blank");
+        }
     }
 
     @Override

@@ -11,10 +11,16 @@ import account.dao.model.DomainModels.Investor;
 import account.dao.model.DomainModels.SecurityAccount;
 import account.dto.CloseFundAccountRequest;
 import account.dto.CloseSecurityAccountRequest;
+import account.dto.CreateFundAccountRequest;
 import account.dto.CreateSecurityAccountRequest;
 import account.dto.DeactivateStaffRequest;
+import account.dto.AdminFreezeRequest;
 import account.dto.ReportFundLossRequest;
 import account.dto.UpdateInvestorInfoRequest;
+import account.enums.AccountType;
+import account.enums.FreezeType;
+import account.integration.BlacklistClientException;
+import account.service.api.AdminService;
 import account.service.api.FundAccountService;
 import account.service.api.SecurityAccountService;
 import account.service.api.StaffService;
@@ -42,6 +48,7 @@ class AccountBusinessRuleTest {
     private SecurityAccountService securityService;
     private FundAccountService fundService;
     private StaffService staffService;
+    private AdminService adminService;
     private InMemoryStaffAuthTokenService staffAuthTokenService;
 
     @BeforeEach
@@ -187,6 +194,7 @@ class AccountBusinessRuleTest {
                 Clock.fixed(Instant.parse("2026-06-19T08:00:00Z"), ZoneId.of("Asia/Shanghai"))
         );
         staffService = new StaffServiceImpl(registry, staffAuthTokenService);
+        adminService = new AdminServiceImpl(registry);
     }
 
     @Test
@@ -200,6 +208,99 @@ class AccountBusinessRuleTest {
 
         BusinessException ex = assertThrows(BusinessException.class, () -> securityService.createSecurityAccount(request));
         assertEquals(ErrorCode.ERR_019, ex.getErrorCode());
+    }
+
+    @Test
+    void createSecurityAccountRejectsBlacklistedInvestor() {
+        securityService = new SecurityAccountServiceImpl(
+                registry,
+                userName -> true,
+                new InMemoryClientAuthTokenService(
+                        7200,
+                        Clock.fixed(Instant.parse("2026-06-19T08:00:00Z"), ZoneId.of("Asia/Shanghai"))
+                )
+        );
+
+        CreateSecurityAccountRequest request = new CreateSecurityAccountRequest();
+        request.setInvestorType("个人");
+        request.setName("Blocked");
+        request.setGender("男");
+        request.setIdType("身份证");
+        request.setIdNumber("330101199001010099");
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> securityService.createSecurityAccount(request));
+        assertEquals(ErrorCode.ERR_012, ex.getErrorCode());
+    }
+
+    @Test
+    void createSecurityAccountAllowsWhenBlacklistServiceFails() {
+        securityService = new SecurityAccountServiceImpl(
+                registry,
+                userName -> {
+                    throw new BlacklistClientException("blacklist unavailable");
+                },
+                new InMemoryClientAuthTokenService(
+                        7200,
+                        Clock.fixed(Instant.parse("2026-06-19T08:00:00Z"), ZoneId.of("Asia/Shanghai"))
+                )
+        );
+
+        CreateSecurityAccountRequest request = new CreateSecurityAccountRequest();
+        request.setInvestorType("个人");
+        request.setName("ErrorUser");
+        request.setGender("男");
+        request.setIdType("身份证");
+        request.setIdNumber("330101199001010098");
+        request.setStaffId(1);
+
+        var response = securityService.createSecurityAccount(request);
+        assertEquals("NORMAL", response.getStatus());
+    }
+
+    @Test
+    void createCorporateSecurityAccountSucceedsWithRequiredFields() {
+        CreateSecurityAccountRequest request = new CreateSecurityAccountRequest();
+        request.setInvestorType("法人");
+        request.setName("法人甲");
+        request.setIdType("营业执照");
+        request.setIdNumber("CORP-20260620-01");
+        request.setPhone("13800000000");
+        request.setAddress("杭州市西湖区测试路 1 号");
+        request.setLegalNumber("LEGAL-001");
+        request.setBusinessLicense("BL-001");
+        request.setAuthorizeName("授权人甲");
+        request.setAuthorizePhone("13900000000");
+        request.setAuthorizeAddress("杭州市滨江区测试路 2 号");
+        request.setExecutorName("执行人甲");
+        request.setStaffId(1);
+
+        var response = securityService.createSecurityAccount(request);
+
+        assertEquals("NORMAL", response.getStatus());
+        var investor = registry.investorDao().findById(response.getInvestorId()).orElseThrow();
+        assertEquals(InvestorType.LEGAL_ENTITY, investor.type());
+        assertEquals("BL-001", investor.businessLicense());
+        assertEquals("授权人甲", investor.authorizeName());
+    }
+
+    @Test
+    void createPersonalSecurityAccountWithAgentPersistsAgentInfo() {
+        CreateSecurityAccountRequest request = new CreateSecurityAccountRequest();
+        request.setInvestorType("个人");
+        request.setName("Agent User");
+        request.setGender("女");
+        request.setIdType("身份证");
+        request.setIdNumber("330101199201010022");
+        request.setAgentName("代办人甲");
+        request.setAgentIdNumber("330101199501010033");
+        request.setStaffId(1);
+
+        var response = securityService.createSecurityAccount(request);
+
+        assertEquals("NORMAL", response.getStatus());
+        var investor = registry.investorDao().findById(response.getInvestorId()).orElseThrow();
+        assertEquals("代办人甲", investor.agentName());
+        assertEquals("330101199501010033", investor.agentIdNumber());
     }
 
     @Test
@@ -221,8 +322,38 @@ class AccountBusinessRuleTest {
     }
 
     @Test
+    void closeSecurityAccountAlsoUnbindsFundAccount() {
+        seedBoundAccounts("SA1010", "FA1010");
+
+        CloseSecurityAccountRequest request = new CloseSecurityAccountRequest();
+        request.setSecAccNo("SA1010");
+        request.setIdNumber("330101199001010011");
+        request.setStaffId(1);
+
+        securityService.closeSecurityAccount(request);
+
+        assertEquals(AccountStatus.CLOSED, registry.securityAccountDao().findByAccountNo("SA1010").orElseThrow().status());
+        assertNull(registry.securityAccountDao().findByAccountNo("SA1010").orElseThrow().linkedFundAcc());
+        assertNull(registry.fundAccountDao().findByAccountNo("FA1010").orElseThrow().secAccNo());
+    }
+
+    @Test
     void reportFundLossAlsoFreezesSecurityAccount() {
         seedBoundAccounts("SA1002", "FA1002");
+        registry.transactionManager().execute(connection -> {
+            registry.fundAccountDao().updateBalances(connection, "FA1002", new BigDecimal("200.00"), new BigDecimal("50.00"));
+            registry.holdingDao().saveOrUpdate(connection, new Holding(
+                    null,
+                    "SA1002",
+                    "600000",
+                    "浦发银行",
+                    120,
+                    30,
+                    new BigDecimal("10.0000"),
+                    LocalDateTime.now()
+            ));
+            return null;
+        });
 
         ReportFundLossRequest request = new ReportFundLossRequest();
         request.setFundAccNo("FA1002");
@@ -233,6 +364,207 @@ class AccountBusinessRuleTest {
 
         assertEquals(AccountStatus.LOSS_FROZEN, registry.fundAccountDao().findByAccountNo("FA1002").orElseThrow().status());
         assertEquals(AccountStatus.LOSS_FROZEN, registry.securityAccountDao().findByAccountNo("SA1002").orElseThrow().status());
+        assertEquals(BigDecimal.ZERO.setScale(2), registry.fundAccountDao().findByAccountNo("FA1002").orElseThrow().availableBalance().setScale(2));
+        assertEquals(new BigDecimal("250.00"), registry.fundAccountDao().findByAccountNo("FA1002").orElseThrow().frozenBalance());
+        assertEquals(0, registry.holdingDao().findByAccountAndStock("SA1002", "600000").orElseThrow().quantity());
+        assertEquals(150, registry.holdingDao().findByAccountAndStock("SA1002", "600000").orElseThrow().frozenQuantity());
+    }
+
+    @Test
+    void adminFreezeFundAccountAlsoFreezesBalancesAndLinkedHoldings() {
+        seedBoundAccounts("SA3001", "FA3001");
+        registry.transactionManager().execute(connection -> {
+            registry.fundAccountDao().updateBalances(connection, "FA3001", new BigDecimal("600.00"), new BigDecimal("40.00"));
+            registry.holdingDao().saveOrUpdate(connection, new Holding(
+                    null,
+                    "SA3001",
+                    "000001",
+                    "平安银行",
+                    80,
+                    20,
+                    new BigDecimal("11.0000"),
+                    LocalDateTime.now()
+            ));
+            return null;
+        });
+
+        AdminFreezeRequest request = new AdminFreezeRequest();
+        request.setAdminId("1");
+        request.setAccountType(AccountType.FUND);
+        request.setAccountNo("FA3001");
+        request.setFreezeType(FreezeType.VIOLATION);
+        request.setReason("manual freeze");
+
+        adminService.adminFreezeAccount(request);
+
+        var fund = registry.fundAccountDao().findByAccountNo("FA3001").orElseThrow();
+        var security = registry.securityAccountDao().findByAccountNo("SA3001").orElseThrow();
+        var holding = registry.holdingDao().findByAccountAndStock("SA3001", "000001").orElseThrow();
+
+        assertEquals(AccountStatus.VIOLATION_FROZEN, fund.status());
+        assertEquals(AccountStatus.VIOLATION_FROZEN, security.status());
+        assertEquals(BigDecimal.ZERO.setScale(2), fund.availableBalance().setScale(2));
+        assertEquals(new BigDecimal("640.00"), fund.frozenBalance());
+        assertEquals(0, holding.quantity());
+        assertEquals(100, holding.frozenQuantity());
+    }
+
+    @Test
+    void adminUnfreezeFundAccountRestoresBalancesAndLinkedHoldings() {
+        seedBoundAccounts("SA3002", "FA3002");
+        registry.transactionManager().execute(connection -> {
+            registry.fundAccountDao().updateBalances(connection, "FA3002", BigDecimal.ZERO, new BigDecimal("520.00"));
+            registry.fundAccountDao().updateStatus(connection, "FA3002", AccountStatus.VIOLATION_FROZEN);
+            registry.holdingDao().saveOrUpdate(connection, new Holding(
+                    null,
+                    "SA3002",
+                    "600519",
+                    "贵州茅台",
+                    0,
+                    35,
+                    new BigDecimal("1500.0000"),
+                    LocalDateTime.now()
+            ));
+            registry.securityAccountDao().updateStatus(connection, "SA3002", AccountStatus.VIOLATION_FROZEN);
+            return null;
+        });
+
+        AdminFreezeRequest request = new AdminFreezeRequest();
+        request.setAdminId("1");
+        request.setAccountType(AccountType.FUND);
+        request.setAccountNo("FA3002");
+        request.setFreezeType(FreezeType.VIOLATION);
+
+        adminService.adminUnfreezeAccount(request);
+
+        var fund = registry.fundAccountDao().findByAccountNo("FA3002").orElseThrow();
+        var security = registry.securityAccountDao().findByAccountNo("SA3002").orElseThrow();
+        var holding = registry.holdingDao().findByAccountAndStock("SA3002", "600519").orElseThrow();
+
+        assertEquals(AccountStatus.NORMAL, fund.status());
+        assertEquals(AccountStatus.NORMAL, security.status());
+        assertEquals(new BigDecimal("520.00"), fund.availableBalance());
+        assertEquals(BigDecimal.ZERO.setScale(2), fund.frozenBalance().setScale(2));
+        assertEquals(35, holding.quantity());
+        assertEquals(0, holding.frozenQuantity());
+    }
+
+    @Test
+    void adminFreezeSecurityAccountAlsoFreezesHoldings() {
+        seedSecurityOnlyAccount("SA3003");
+        registry.transactionManager().execute(connection -> {
+            registry.holdingDao().saveOrUpdate(connection, new Holding(
+                    null,
+                    "SA3003",
+                    "600036",
+                    "招商银行",
+                    45,
+                    5,
+                    new BigDecimal("33.0000"),
+                    LocalDateTime.now()
+            ));
+            return null;
+        });
+
+        AdminFreezeRequest request = new AdminFreezeRequest();
+        request.setAdminId("1");
+        request.setAccountType(AccountType.SECURITY);
+        request.setAccountNo("SA3003");
+        request.setFreezeType(FreezeType.VIOLATION);
+
+        adminService.adminFreezeAccount(request);
+
+        var security = registry.securityAccountDao().findByAccountNo("SA3003").orElseThrow();
+        var holding = registry.holdingDao().findByAccountAndStock("SA3003", "600036").orElseThrow();
+
+        assertEquals(AccountStatus.VIOLATION_FROZEN, security.status());
+        assertEquals(0, holding.quantity());
+        assertEquals(50, holding.frozenQuantity());
+    }
+
+    @Test
+    void adminUnfreezeSecurityAccountRestoresHoldings() {
+        seedSecurityOnlyAccount("SA3004");
+        registry.transactionManager().execute(connection -> {
+            registry.securityAccountDao().updateStatus(connection, "SA3004", AccountStatus.VIOLATION_FROZEN);
+            registry.holdingDao().saveOrUpdate(connection, new Holding(
+                    null,
+                    "SA3004",
+                    "601318",
+                    "中国平安",
+                    0,
+                    60,
+                    new BigDecimal("45.0000"),
+                    LocalDateTime.now()
+            ));
+            return null;
+        });
+
+        AdminFreezeRequest request = new AdminFreezeRequest();
+        request.setAdminId("1");
+        request.setAccountType(AccountType.SECURITY);
+        request.setAccountNo("SA3004");
+        request.setFreezeType(FreezeType.VIOLATION);
+
+        adminService.adminUnfreezeAccount(request);
+
+        var security = registry.securityAccountDao().findByAccountNo("SA3004").orElseThrow();
+        var holding = registry.holdingDao().findByAccountAndStock("SA3004", "601318").orElseThrow();
+
+        assertEquals(AccountStatus.NORMAL, security.status());
+        assertEquals(60, holding.quantity());
+        assertEquals(0, holding.frozenQuantity());
+    }
+
+    @Test
+    void createFundAccountRejectsBlacklistedInvestor() {
+        fundService = new FundAccountServiceImpl(
+                registry,
+                userName -> true,
+                new InMemoryClientAuthTokenService(
+                        7200,
+                        Clock.fixed(Instant.parse("2026-06-19T08:00:00Z"), ZoneId.of("Asia/Shanghai"))
+                )
+        );
+        seedSecurityOnlyAccount("SA2001");
+
+        CreateFundAccountRequest request = new CreateFundAccountRequest();
+        request.setSecAccNo("SA2001");
+        request.setIdNumber("330101199001010011");
+        request.setTradePassword("trade123");
+        request.setWithdrawPassword("withdraw123");
+        request.setCurrency("CNY");
+        request.setStaffId(1);
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> fundService.createFundAccount(request));
+        assertEquals(ErrorCode.ERR_012, ex.getErrorCode());
+    }
+
+    @Test
+    void createFundAccountAllowsWhenBlacklistServiceFails() {
+        fundService = new FundAccountServiceImpl(
+                registry,
+                userName -> {
+                    throw new BlacklistClientException("blacklist unavailable");
+                },
+                new InMemoryClientAuthTokenService(
+                        7200,
+                        Clock.fixed(Instant.parse("2026-06-19T08:00:00Z"), ZoneId.of("Asia/Shanghai"))
+                )
+        );
+        seedSecurityOnlyAccount("SA2002");
+
+        CreateFundAccountRequest request = new CreateFundAccountRequest();
+        request.setSecAccNo("SA2002");
+        request.setIdNumber("330101199001010011");
+        request.setTradePassword("trade123");
+        request.setWithdrawPassword("withdraw123");
+        request.setCurrency("CNY");
+        request.setStaffId(1);
+
+        var response = fundService.createFundAccount(request);
+        assertEquals("NORMAL", response.getStatus());
+        assertEquals("SA2002", response.getSecAccNo());
     }
 
     @Test
@@ -341,6 +673,42 @@ class AccountBusinessRuleTest {
                     new BigDecimal("0.0035")
             ));
             registry.securityAccountDao().bindFundAccount(connection, secAccNo, fundAccNo);
+            return null;
+        });
+    }
+
+    private void seedSecurityOnlyAccount(String secAccNo) {
+        registry.transactionManager().execute(connection -> {
+            insertStaff(connection, 1, "staff01");
+            int investorId = registry.investorDao().create(connection, new Investor(
+                    null,
+                    InvestorType.PERSONAL,
+                    "Tester",
+                    "男",
+                    "身份证",
+                    "330101199001010011",
+                    "13800000000",
+                    "Hangzhou",
+                    "ZJU",
+                    "Engineer",
+                    "Bachelor",
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    LocalDateTime.now()
+            ));
+            registry.securityAccountDao().create(connection, new SecurityAccount(
+                    secAccNo,
+                    investorId,
+                    AccountStatus.NORMAL,
+                    LocalDate.of(2026, 6, 19),
+                    null
+            ));
             return null;
         });
     }

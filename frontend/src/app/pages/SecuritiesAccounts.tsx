@@ -1,10 +1,10 @@
-import { useState, useEffect } from "react";
-import { Plus, Search, AlertCircle, RefreshCw, XCircle } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { AlertCircle, Pencil, Plus, RefreshCw, Search, XCircle } from "lucide-react";
 import { Button } from "../components/ui/button";
-import { Input } from "../components/ui/input";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "../components/ui/dialog";
+import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { api } from "../lib/api";
 
@@ -19,474 +19,713 @@ interface SecurityAccount {
   linked_fund_acc?: string;
 }
 
+type ActionType = "loss" | "reissue" | "close" | "edit";
+type InvestorType = "个人" | "法人";
+type AttendanceType = "self" | "agent";
+
+function maskIdNumber(idNumber: string) {
+  if (!idNumber) return "";
+  if (idNumber.length <= 8) return idNumber;
+  return `${idNumber.slice(0, 3)}********${idNumber.slice(-4)}`;
+}
+
 export default function SecuritiesAccounts() {
   const [accounts, setAccounts] = useState<SecurityAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
-  const [newAccountId, setNewAccountId] = useState("");
-  const [isChecking, setIsChecking] = useState(false);
-  const [checkError, setCheckError] = useState("");
-  
-  // 挂失/补办/销户相关状态
-  const [actionModalOpen, setActionModalOpen] = useState(false);
-  const [actionType, setActionType] = useState<'loss' | 'reissue' | 'close' | null>(null);
+  const [investorType, setInvestorType] = useState<InvestorType>("个人");
+  const [attendanceType, setAttendanceType] = useState<AttendanceType>("self");
+  const [isSubmittingCreate, setIsSubmittingCreate] = useState(false);
+  const [createError, setCreateError] = useState("");
+
   const [selectedAccount, setSelectedAccount] = useState<SecurityAccount | null>(null);
+  const [actionType, setActionType] = useState<ActionType | null>(null);
+  const [actionModalOpen, setActionModalOpen] = useState(false);
+  const [actionIdNumber, setActionIdNumber] = useState("");
   const [actionReason, setActionReason] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
   const [actionError, setActionError] = useState("");
-  
-  // 获取账户列表
+
+  const [editForm, setEditForm] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    void fetchAccounts();
+  }, []);
+
   const fetchAccounts = async () => {
     try {
       setLoading(true);
       const response = await api.listSecurityAccounts();
-      if (response.code === 0 && response.data) {
-        setAccounts(response.data);
-      } else {
-        console.error('获取账户列表失败:', response.message);
-      }
+      setAccounts(Array.isArray(response) ? response : []);
     } catch (error) {
-      console.error('获取账户列表失败:', error);
+      console.error("获取证券账户列表失败:", error);
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchAccounts();
-  }, []);
+  const activeAccounts = useMemo(
+    () => accounts.filter((account) => account.status !== "closed"),
+    [accounts]
+  );
+
+  const filteredAccounts = useMemo(() => {
+    const keyword = searchTerm.trim().toLowerCase();
+    if (!keyword) return activeAccounts;
+    return activeAccounts.filter((account) => {
+      const searchFields = [
+        account.name,
+        account.sec_acc_no,
+        account.investor_type,
+        account.linked_fund_acc || "",
+      ];
+      return searchFields.some((value) => value?.toLowerCase().includes(keyword));
+    });
+  }, [activeAccounts, searchTerm]);
+
+  const normalAccounts = useMemo(
+    () => filteredAccounts.filter((account) => account.status === "normal"),
+    [filteredAccounts]
+  );
+
+  const frozenAccounts = useMemo(
+    () => filteredAccounts.filter((account) => account.status !== "normal"),
+    [filteredAccounts]
+  );
+
+  const resetCreateForm = () => {
+    setInvestorType("个人");
+    setAttendanceType("self");
+    setCreateError("");
+    const form = document.getElementById("security-account-form") as HTMLFormElement | null;
+    form?.reset();
+  };
 
   const handleCreateAccount = async () => {
-    setIsChecking(true);
-    setCheckError("");
-    
-    // 获取开户人姓名（根据账户类型从不同字段获取）
-    const activeTab = document.querySelector('[data-state="active"]')?.getAttribute('value') || 'individual';
-    const isIndividual = activeTab === 'individual';
-    const nameInput = isIndividual
-      ? document.getElementById('name') as HTMLInputElement
-      : document.getElementById('corpName') as HTMLInputElement;
-    const userName = nameInput?.value || '';
-    
-    if (!userName) {
-      setCheckError("请输入开户人姓名或公司名称以供黑名单核查");
-      setIsChecking(false);
+    const form = document.getElementById("security-account-form") as HTMLFormElement | null;
+    if (!form) return;
+
+    const formData = new FormData(form);
+    const basePayload = {
+      investor_type: investorType,
+      name: String(formData.get("name") || "").trim(),
+      id_type: String(formData.get("id_type") || "").trim(),
+      id_number: String(formData.get("id_number") || "").trim(),
+      phone: String(formData.get("phone") || "").trim(),
+      address: String(formData.get("address") || "").trim(),
+      work_unit: String(formData.get("work_unit") || "").trim(),
+      occupation: String(formData.get("occupation") || "").trim(),
+      education: String(formData.get("education") || "").trim(),
+    };
+
+    let payload: Record<string, string> = {
+      ...basePayload,
+      gender: String(formData.get("gender") || "").trim(),
+    };
+
+    if (!payload.name || !payload.id_type || !payload.id_number) {
+      setCreateError("请填写完整的开户信息");
       return;
     }
-    
-    try {
-      // 调用黑名单检查API（六号API）
-      const isBlacklisted = await api.checkBlacklist(userName);
-      
-      if (isBlacklisted) {
-        setCheckError("联网核查失败：该用户已被列入交易管理系统黑名单（异常管控），拒绝开户！");
-      } else if (!newAccountId) {
-        setCheckError("请输入有效的证件号码进行核查");
-      } else {
-        // 黑名单检查通过，调用开户API
-        let accountData: any;
-        
-        if (isIndividual) {
-          // 个人账户
-          const gender = (document.getElementById('gender') as HTMLSelectElement)?.value || '男';
-          const address = (document.getElementById('address') as HTMLInputElement)?.value || '';
-          const occupation = (document.getElementById('occupation') as HTMLInputElement)?.value || '';
-          const education = (document.getElementById('education') as HTMLInputElement)?.value || '';
-          const workplace = (document.getElementById('workplace') as HTMLInputElement)?.value || '';
-          const phone = (document.getElementById('phone') as HTMLInputElement)?.value || '';
-          
-          accountData = {
-            investor_type: '个人',
-            name: userName,
-            gender: gender,
-            id_type: '身份证',
-            id_number: newAccountId,
-            phone: phone,
-            address: address,
-            work_unit: workplace,
-            occupation: occupation,
-            education: education
-          };
-        } else {
-          // 法人账户
-          const regNumber = (document.getElementById('regNumber') as HTMLInputElement)?.value || '';
-          const license = (document.getElementById('license') as HTMLInputElement)?.value || '';
-          const legalRepId = (document.getElementById('legalRepId') as HTMLInputElement)?.value || '';
-          const corpPhone = (document.getElementById('corpPhone') as HTMLInputElement)?.value || '';
-          const corpAddress = (document.getElementById('corpAddress') as HTMLInputElement)?.value || '';
-          const authName = (document.getElementById('authName') as HTMLInputElement)?.value || '';
-          const authId = (document.getElementById('authId') as HTMLInputElement)?.value || '';
-          const authPhone = (document.getElementById('authPhone') as HTMLInputElement)?.value || '';
-          const authAddress = (document.getElementById('authAddress') as HTMLInputElement)?.value || '';
-          
-          accountData = {
-            investor_type: '法人',
-            name: userName,
-            id_type: '营业执照',
-            id_number: regNumber || newAccountId,
-            phone: corpPhone,
-            address: corpAddress,
-            business_license: license,
-            authorize_name: authName,
-            authorize_phone: authPhone,
-            authorize_address: authAddress,
-            agent_name: authName,
-            agent_id_number: authId
-          };
-        }
-        
-        try {
-          const result = await api.createSecuritiesAccount(accountData);
-          if (result.code === 0) {
-            setIsAccountModalOpen(false);
-            setNewAccountId("");
-            setCheckError("");
-            alert(`开户成功！证券账户号: ${result.sec_acc_no || '已生成'}`);
-            // 刷新账户列表
-            fetchAccounts();
-          } else {
-            setCheckError(result.message || "开户失败");
-          }
-        } catch (error: any) {
-          setCheckError(error.message || "开户失败，请检查网络连接");
-        }
+
+    if (investorType === "法人") {
+      payload = {
+        ...basePayload,
+        legal_number: String(formData.get("legal_number") || "").trim(),
+        business_license: String(formData.get("business_license") || "").trim(),
+        authorize_name: String(formData.get("authorize_name") || "").trim(),
+        authorize_phone: String(formData.get("authorize_phone") || "").trim(),
+        authorize_address: String(formData.get("authorize_address") || "").trim(),
+        executor_name: String(formData.get("executor_name") || "").trim(),
+        agent_name: String(formData.get("agent_name") || "").trim(),
+        agent_id_number: String(formData.get("agent_id_number") || "").trim(),
+      };
+    } else {
+      payload = {
+        ...payload,
+        agent_name: attendanceType === "agent" ? String(formData.get("agent_name") || "").trim() : "",
+        agent_id_number:
+          attendanceType === "agent" ? String(formData.get("agent_id_number") || "").trim() : "",
+      };
+    }
+
+    if (investorType === "个人" && attendanceType === "agent") {
+      if (!payload.agent_name || !payload.agent_id_number) {
+        setCreateError("个人代办开户时，请填写代办人姓名和证件号码");
+        return;
       }
-    } catch (error) {
-      setCheckError("黑名单查询服务暂时不可用，请稍后重试");
+    }
+
+    if (investorType === "法人") {
+      const requiredCorpFields = [
+        "legal_number",
+        "business_license",
+        "authorize_name",
+        "authorize_phone",
+        "authorize_address",
+        "executor_name",
+      ] as const;
+      const missingField = requiredCorpFields.find((field) => !payload[field]);
+      if (missingField) {
+        setCreateError("请填写完整的法人开户信息");
+        return;
+      }
+    }
+
+    setIsSubmittingCreate(true);
+    setCreateError("");
+    try {
+      const result = await api.createSecuritiesAccount(payload);
+      alert(`开户成功，证券账户号：${result.sec_acc_no || "已生成"}`);
+      setIsAccountModalOpen(false);
+      resetCreateForm();
+      await fetchAccounts();
+    } catch (error: any) {
+      setCreateError(error.message || "开户失败");
     } finally {
-      setIsChecking(false);
+      setIsSubmittingCreate(false);
     }
   };
 
-  // 打开操作对话框
-  const openActionModal = (account: SecurityAccount, type: 'loss' | 'reissue' | 'close') => {
+  const openActionModal = (account: SecurityAccount, type: ActionType) => {
     setSelectedAccount(account);
     setActionType(type);
+    setActionIdNumber("");
     setActionReason("");
     setActionError("");
     setActionModalOpen(true);
+
+    if (type === "edit") {
+      setEditForm({
+        name: account.name,
+        id_type: account.investor_type === "法人" ? "营业执照" : "身份证",
+        id_number: account.id_number,
+        gender: "",
+        phone: "",
+        address: "",
+        work_unit: "",
+        occupation: "",
+        education: "",
+      });
+    }
   };
 
-  // 执行账户操作（挂失/补办/销户）
-  const handleAccountAction = async () => {
+  const handleActionSubmit = async () => {
     if (!selectedAccount || !actionType) return;
-    
+
+    if (actionType !== "edit" && !actionIdNumber.trim()) {
+      setActionError("请由工作人员手动输入身份证号进行校验");
+      return;
+    }
+
     setActionLoading(true);
     setActionError("");
-    
     try {
-      let result;
-      if (actionType === 'loss') {
-        result = await api.reportSecurityLoss(selectedAccount.sec_acc_no, actionReason, selectedAccount.id_number);
-      } else if (actionType === 'reissue') {
-        result = await api.reissueSecurityAccount(selectedAccount.sec_acc_no, actionReason, selectedAccount.id_number);
-      } else if (actionType === 'close') {
-        result = await api.closeSecurityAccount(selectedAccount.sec_acc_no, actionReason, selectedAccount.id_number);
+      if (actionType === "loss") {
+        await api.reportSecurityLoss(selectedAccount.sec_acc_no, actionReason, actionIdNumber.trim());
+      } else if (actionType === "reissue") {
+        await api.reissueSecurityAccount(selectedAccount.sec_acc_no, actionIdNumber.trim());
+      } else if (actionType === "close") {
+        await api.closeSecurityAccount(selectedAccount.sec_acc_no, actionReason, actionIdNumber.trim());
+      } else if (actionType === "edit") {
+        await api.updateInvestorInfo(selectedAccount.investor_id, editForm);
       }
-      
-      if (result && result.code === 0) {
-        setActionModalOpen(false);
-        alert(actionType === 'loss' ? '挂失成功' : actionType === 'reissue' ? '补办成功' : '销户成功');
-        fetchAccounts(); // 刷新列表
-      } else {
-        setActionError(result?.message || "操作失败");
-      }
+
+      setActionModalOpen(false);
+      await fetchAccounts();
     } catch (error: any) {
-      setActionError(error.message || "操作失败，请检查网络连接");
+      setActionError(error.message || "操作失败");
     } finally {
       setActionLoading(false);
     }
   };
 
-  // 过滤账户列表
-  const filteredAccounts = accounts.filter(account => 
-    account.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    account.sec_acc_no?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    account.id_number?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const renderRows = (list: SecurityAccount[], emptyText: string) => {
+    if (loading) {
+      return (
+        <TableRow>
+          <TableCell colSpan={8} className="py-8 text-center text-slate-500">
+            加载中...
+          </TableCell>
+        </TableRow>
+      );
+    }
+
+    if (list.length === 0) {
+      return (
+        <TableRow>
+          <TableCell colSpan={8} className="py-8 text-center text-slate-500">
+            {emptyText}
+          </TableCell>
+        </TableRow>
+      );
+    }
+
+    return list.map((account) => (
+      <TableRow key={account.sec_acc_no} data-testid={`security-row-${account.sec_acc_no}`}>
+        <TableCell className="font-medium">{account.sec_acc_no}</TableCell>
+        <TableCell>{account.investor_type}</TableCell>
+        <TableCell>{account.name}</TableCell>
+        <TableCell className="text-slate-500">{maskIdNumber(account.id_number)}</TableCell>
+        <TableCell className="text-slate-500">{account.linked_fund_acc || "未绑定"}</TableCell>
+        <TableCell>
+          {account.status === "normal" ? (
+            <span className="inline-flex items-center rounded-md bg-green-50 px-2 py-1 text-xs font-medium text-green-700 ring-1 ring-inset ring-green-600/20">
+              正常
+            </span>
+          ) : (
+            <span className="inline-flex items-center rounded-md bg-yellow-50 px-2 py-1 text-xs font-medium text-yellow-800 ring-1 ring-inset ring-yellow-600/20">
+              冻结
+            </span>
+          )}
+        </TableCell>
+        <TableCell className="text-slate-500">{account.open_date}</TableCell>
+        <TableCell className="text-right">
+          <div className="flex justify-end gap-2">
+            <Button
+              data-testid={`security-edit-${account.sec_acc_no}`}
+              variant="outline"
+              size="sm"
+              className="h-8 border-slate-200 text-slate-600 hover:bg-slate-50"
+              onClick={() => openActionModal(account, "edit")}
+            >
+              <Pencil className="mr-1 h-3 w-3" />
+              修改信息
+            </Button>
+            {account.status === "normal" && (
+              <>
+                <Button
+                  data-testid={`security-loss-${account.sec_acc_no}`}
+                  variant="outline"
+                  size="sm"
+                  className="h-8 border-yellow-200 text-yellow-700 hover:bg-yellow-50"
+                  onClick={() => openActionModal(account, "loss")}
+                >
+                  <AlertCircle className="mr-1 h-3 w-3" />
+                  挂失
+                </Button>
+                <Button
+                  data-testid={`security-close-${account.sec_acc_no}`}
+                  variant="outline"
+                  size="sm"
+                  className="h-8 border-red-200 text-red-600 hover:bg-red-50"
+                  onClick={() => openActionModal(account, "close")}
+                >
+                  <XCircle className="mr-1 h-3 w-3" />
+                  销户
+                </Button>
+              </>
+            )}
+            {account.status !== "normal" && (
+              <Button
+                data-testid={`security-reissue-${account.sec_acc_no}`}
+                variant="outline"
+                size="sm"
+                className="h-8 border-red-200 text-red-600 hover:bg-red-50"
+                onClick={() => openActionModal(account, "reissue")}
+              >
+                <RefreshCw className="mr-1 h-3 w-3" />
+                补办
+              </Button>
+            )}
+          </div>
+        </TableCell>
+      </TableRow>
+    ));
+  };
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
           <h2 className="text-2xl font-bold tracking-tight">证券账户业务</h2>
-          <p className="text-slate-500">管理投资者的证券账户（开户、挂失、销户）</p>
+          <p className="text-slate-500">管理投资者证券账户的开户、挂失、补办、销户与信息维护</p>
         </div>
-        <Dialog open={isAccountModalOpen} onOpenChange={setIsAccountModalOpen}>
+        <Dialog
+          open={isAccountModalOpen}
+          onOpenChange={(open) => {
+            setIsAccountModalOpen(open);
+            if (!open) {
+              resetCreateForm();
+            }
+          }}
+        >
           <DialogTrigger asChild>
-            <Button className="bg-red-600 hover:bg-red-700">
-              <Plus className="mr-2 h-4 w-4" /> 开设证券账户
+            <Button data-testid="open-security-create" className="bg-red-600 hover:bg-red-700">
+              <Plus className="mr-2 h-4 w-4" />
+              开设证券账户
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
             <DialogHeader>
               <DialogTitle>开设证券账户</DialogTitle>
-              <DialogDescription>
-                填写相关信息为投资者开设新的证券账户，请确保信息真实有效。
-              </DialogDescription>
+              <DialogDescription>填写完整开户信息，由后端统一完成资格校验与开户处理。</DialogDescription>
             </DialogHeader>
-            <Tabs defaultValue="individual" className="mt-4">
+            <Tabs
+              value={investorType}
+              onValueChange={(value) => setInvestorType(value as InvestorType)}
+              className="mt-4"
+            >
               <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="individual">个人账户 (自然人)</TabsTrigger>
-                <TabsTrigger value="corporate">法人账户</TabsTrigger>
+                <TabsTrigger data-testid="security-tab-personal" value="个人">个人账户</TabsTrigger>
+                <TabsTrigger data-testid="security-tab-corporate" value="法人">法人账户</TabsTrigger>
               </TabsList>
-              
-              <TabsContent value="individual" className="space-y-4 py-4">
-                <div className="grid grid-cols-2 gap-4">
+              <form id="security-account-form" className="space-y-4 py-4">
+                <TabsContent value="个人" className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="name">姓名</Label>
-                    <Input id="name" placeholder="请输入真实姓名" />
+                    <Label>开户方式</Label>
+                    <div className="flex gap-2">
+                      <Button
+                        data-testid="security-attendance-self"
+                        type="button"
+                        variant={attendanceType === "self" ? "default" : "outline"}
+                        className={attendanceType === "self" ? "bg-red-600 hover:bg-red-700" : ""}
+                        onClick={() => setAttendanceType("self")}
+                      >
+                        本人办理
+                      </Button>
+                      <Button
+                        data-testid="security-attendance-agent"
+                        type="button"
+                        variant={attendanceType === "agent" ? "default" : "outline"}
+                        className={attendanceType === "agent" ? "bg-red-600 hover:bg-red-700" : ""}
+                        onClick={() => setAttendanceType("agent")}
+                      >
+                        代办开户
+                      </Button>
+                    </div>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="gender">性别</Label>
-                    <select id="gender" className="flex h-10 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm">
-                      <option>男</option>
-                      <option>女</option>
-                    </select>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="person-name">姓名</Label>
+                      <Input id="person-name" name="name" placeholder="请输入真实姓名" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="person-gender">性别</Label>
+                      <select
+                        id="person-gender"
+                        name="gender"
+                        className="flex h-10 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
+                      >
+                        <option value="男">男</option>
+                        <option value="女">女</option>
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="person-id-type">证件类型</Label>
+                      <Input id="person-id-type" name="id_type" defaultValue="身份证" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="person-id-number">证件号码</Label>
+                      <Input id="person-id-number" name="id_number" placeholder="请输入 18 位身份证号" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="person-phone">联系电话</Label>
+                      <Input id="person-phone" name="phone" placeholder="请输入联系电话" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="person-work-unit">工作单位</Label>
+                      <Input id="person-work-unit" name="work_unit" placeholder="请输入工作单位" />
+                    </div>
+                    <div className="col-span-2 space-y-2">
+                      <Label htmlFor="person-address">家庭地址</Label>
+                      <Input id="person-address" name="address" placeholder="请输入家庭地址" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="person-occupation">职业</Label>
+                      <Input id="person-occupation" name="occupation" placeholder="请输入职业" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="person-education">学历</Label>
+                      <Input id="person-education" name="education" placeholder="请输入学历" />
+                    </div>
+                    {attendanceType === "agent" && (
+                      <>
+                        <div className="space-y-2">
+                          <Label htmlFor="person-agent-name">代办人姓名</Label>
+                          <Input id="person-agent-name" name="agent_name" placeholder="请输入代办人姓名" />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="person-agent-id-number">代办人证件号码</Label>
+                          <Input
+                            id="person-agent-id-number"
+                            name="agent_id_number"
+                            placeholder="请输入代办人证件号码"
+                          />
+                        </div>
+                      </>
+                    )}
                   </div>
-                  <div className="space-y-2 col-span-2">
-                    <Label htmlFor="idNumber">身份证号码</Label>
-                    <Input id="idNumber" placeholder="请输入18位身份证号 (输入尾号 334X 模拟黑名单拦截)" value={newAccountId} onChange={(e) => { setNewAccountId(e.target.value); setCheckError(""); }} />
+                </TabsContent>
+
+                <TabsContent value="法人" className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="corp-name">法人姓名</Label>
+                      <Input id="corp-name" name="name" placeholder="请输入法人姓名" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="corp-id-type">证件类型</Label>
+                      <Input id="corp-id-type" name="id_type" defaultValue="营业执照" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="corp-id-number">营业执照号码</Label>
+                      <Input id="corp-id-number" name="id_number" placeholder="请输入营业执照号码" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="corp-legal-number">法人注册登记号</Label>
+                      <Input id="corp-legal-number" name="legal_number" placeholder="请输入法人注册登记号" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="corp-business-license">营业执照号码</Label>
+                      <Input
+                        id="corp-business-license"
+                        name="business_license"
+                        placeholder="请输入营业执照号码"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="corp-phone">联系电话</Label>
+                      <Input id="corp-phone" name="phone" placeholder="请输入联系电话" />
+                    </div>
+                    <div className="col-span-2 space-y-2">
+                      <Label htmlFor="corp-address">联系地址</Label>
+                      <Input id="corp-address" name="address" placeholder="请输入联系地址" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="corp-authorize-name">授权人姓名</Label>
+                      <Input id="corp-authorize-name" name="authorize_name" placeholder="请输入授权人姓名" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="corp-authorize-phone">授权人联系电话</Label>
+                      <Input id="corp-authorize-phone" name="authorize_phone" placeholder="请输入授权人联系电话" />
+                    </div>
+                    <div className="col-span-2 space-y-2">
+                      <Label htmlFor="corp-authorize-address">授权人地址</Label>
+                      <Input
+                        id="corp-authorize-address"
+                        name="authorize_address"
+                        placeholder="请输入授权人地址"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="corp-executor-name">法人授权执行人姓名</Label>
+                      <Input id="corp-executor-name" name="executor_name" placeholder="请输入执行人姓名" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="corp-agent-name">代理人姓名</Label>
+                      <Input id="corp-agent-name" name="agent_name" placeholder="请输入代理人姓名" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="corp-agent-id-number">代理人证件号</Label>
+                      <Input
+                        id="corp-agent-id-number"
+                        name="agent_id_number"
+                        placeholder="请输入代理人证件号"
+                      />
+                    </div>
                   </div>
-                  <div className="space-y-2 col-span-2">
-                    <Label htmlFor="address">家庭地址</Label>
-                    <Input id="address" placeholder="请输入详细地址" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="occupation">职业</Label>
-                    <Input id="occupation" placeholder="例如：软件工程师" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="education">学历</Label>
-                    <Input id="education" placeholder="例如：本科" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="workplace">工作单位</Label>
-                    <Input id="workplace" placeholder="工作单位名称" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="phone">联系电话</Label>
-                    <Input id="phone" placeholder="手机号码" />
-                  </div>
-                </div>
-              </TabsContent>
-              
-              <TabsContent value="corporate" className="space-y-4 py-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2 col-span-2">
-                    <Label htmlFor="corpName">法人姓名 / 公司名称</Label>
-                    <Input id="corpName" placeholder="请输入公司全称" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="regNumber">有效法人注册登记号</Label>
-                    <Input id="regNumber" placeholder="统一社会信用代码 (包含涉案模拟拦截)" value={newAccountId} onChange={(e) => { setNewAccountId(e.target.value); setCheckError(""); }} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="license">营业执照号码</Label>
-                    <Input id="license" placeholder="营业执照编号" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="legalRepId">法定代表人身份证号码</Label>
-                    <Input id="legalRepId" placeholder="法定代表人身份证" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="corpPhone">法人联系电话</Label>
-                    <Input id="corpPhone" placeholder="公司电话" />
-                  </div>
-                  <div className="space-y-2 col-span-2">
-                    <Label htmlFor="corpAddress">法人联系地址</Label>
-                    <Input id="corpAddress" placeholder="公司注册地址" />
-                  </div>
-                  
-                  <div className="col-span-2 border-t border-slate-200 mt-2 pt-4">
-                    <h4 className="text-sm font-medium mb-3 text-slate-700">授权证券交易执行人信息</h4>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="authName">授权人姓名</Label>
-                    <Input id="authName" placeholder="执行人姓名" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="authId">授权人有效身份证号码</Label>
-                    <Input id="authId" placeholder="执行人身份证" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="authPhone">授权人联系电话</Label>
-                    <Input id="authPhone" placeholder="执行人电话" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="authAddress">授权人地址</Label>
-                    <Input id="authAddress" placeholder="执行人地址" />
-                  </div>
-                </div>
-              </TabsContent>
+                </TabsContent>
+              </form>
             </Tabs>
-            <DialogFooter className="mt-6 border-t border-slate-100 pt-4 flex-col sm:flex-row sm:justify-between sm:items-center">
-              <div className="text-sm font-medium h-6">
-                {checkError && <span className="text-red-600 flex items-center"><AlertCircle className="h-4 w-4 mr-1" />{checkError}</span>}
+            {createError && (
+              <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-600">
+                {createError}
               </div>
-              <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setIsAccountModalOpen(false)}>取消</Button>
-                <Button onClick={handleCreateAccount} disabled={isChecking}>
-                  {isChecking ? (
-                    <><RefreshCw className="mr-2 h-4 w-4 animate-spin" /> 联网核查中...</>
-                  ) : (
-                    '确认开户并分配账号'
-                  )}
-                </Button>
-              </div>
+            )}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsAccountModalOpen(false)}>
+                取消
+              </Button>
+            <Button data-testid="security-create-submit" onClick={handleCreateAccount} disabled={isSubmittingCreate}>
+                {isSubmittingCreate ? "提交中..." : "确认开户"}
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>
 
-      <div className="flex items-center gap-2 max-w-sm">
+      <div className="flex max-w-sm items-center gap-2">
         <div className="relative w-full">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-500" />
-          <Input 
-            className="pl-9" 
-            placeholder="搜索姓名 / 账号 / 证件号..." 
+          <Input
+            className="pl-9"
+            placeholder="搜索姓名 / 账户号 / 类型 / 关联资金账户..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
         <Button variant="outline" size="sm" onClick={fetchAccounts} disabled={loading}>
-          <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+          <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
         </Button>
       </div>
 
-      <div className="rounded-md border border-slate-200 bg-white">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>证券账户号码</TableHead>
-              <TableHead>账户类型</TableHead>
-              <TableHead>姓名 / 法人</TableHead>
-              <TableHead>证件号码 / 注册号</TableHead>
-              <TableHead>状态</TableHead>
-              <TableHead>登记日期</TableHead>
-              <TableHead className="text-right">操作</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {loading ? (
-              <TableRow>
-                <TableCell colSpan={7} className="text-center py-8 text-slate-500">
-                  加载中...
-                </TableCell>
-              </TableRow>
-            ) : filteredAccounts.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={7} className="text-center py-8 text-slate-500">
-                  暂无数据
-                </TableCell>
-              </TableRow>
-            ) : (
-              filteredAccounts.map((account) => (
-                <TableRow key={account.sec_acc_no}>
-                  <TableCell className="font-medium">{account.sec_acc_no}</TableCell>
-                  <TableCell>
-                    {account.investor_type === '个人' ? (
-                      <span className="inline-flex items-center rounded-md bg-red-50 px-2 py-1 text-xs font-medium text-red-700 ring-1 ring-inset ring-red-700/10">个人</span>
-                    ) : (
-                      <span className="inline-flex items-center rounded-md bg-orange-50 px-2 py-1 text-xs font-medium text-orange-700 ring-1 ring-inset ring-orange-700/10">法人</span>
-                    )}
-                  </TableCell>
-                  <TableCell>{account.name}</TableCell>
-                  <TableCell className="text-slate-500">{account.id_number}</TableCell>
-                  <TableCell>
-                    {account.status === 'normal' ? (
-                      <span className="inline-flex items-center rounded-md bg-green-50 px-2 py-1 text-xs font-medium text-green-700 ring-1 ring-inset ring-green-600/20">正常</span>
-                    ) : account.status === 'frozen' ? (
-                      <span className="inline-flex items-center rounded-md bg-yellow-50 px-2 py-1 text-xs font-medium text-yellow-800 ring-1 ring-inset ring-yellow-600/20">挂失/冻结</span>
-                    ) : account.status === 'blacklisted' ? (
-                      <span className="inline-flex items-center rounded-md bg-slate-800 px-2 py-1 text-xs font-medium text-slate-100 ring-1 ring-inset ring-slate-600">黑名单</span>
-                    ) : (
-                      <span className="inline-flex items-center rounded-md bg-red-50 px-2 py-1 text-xs font-medium text-red-700 ring-1 ring-inset ring-red-600/10">已销户</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-slate-500">{account.open_date}</TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-2">
-                      {account.status === 'normal' && (
-                        <Button 
-                          variant="outline" 
-                          size="sm" 
-                          className="h-8 text-yellow-600 border-yellow-200 hover:bg-yellow-50"
-                          onClick={() => openActionModal(account, 'loss')}
-                        >
-                          <AlertCircle className="mr-1 h-3 w-3" /> 挂失
-                        </Button>
-                      )}
-
-                      {account.status === 'frozen' && (
-                        <Button 
-                          variant="outline" 
-                          size="sm" 
-                          className="h-8 text-red-600 border-red-200 hover:bg-red-50"
-                          onClick={() => openActionModal(account, 'reissue')}
-                        >
-                          <RefreshCw className="mr-1 h-3 w-3" /> 补办
-                        </Button>
-                      )}
-
-                      {account.status !== 'closed' && account.status !== 'blacklisted' && account.status !== 'frozen' && (
-                        <Button 
-                          variant="outline" 
-                          size="sm" 
-                          className="h-8 text-red-600 border-red-200 hover:bg-red-50"
-                          onClick={() => openActionModal(account, 'close')}
-                        >
-                          <XCircle className="mr-1 h-3 w-3" /> 销户
-                        </Button>
-                      )}
-                    </div>
-                  </TableCell>
+      <div className="space-y-4">
+        <div>
+          <h3 className="mb-2 text-lg font-semibold">正常账户</h3>
+          <div className="rounded-md border border-slate-200 bg-white">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>证券账户号</TableHead>
+                  <TableHead>账户类型</TableHead>
+                  <TableHead>姓名 / 法人</TableHead>
+                  <TableHead>证件号</TableHead>
+                  <TableHead>关联资金账户</TableHead>
+                  <TableHead>状态</TableHead>
+                  <TableHead>登记日期</TableHead>
+                  <TableHead className="text-right">操作</TableHead>
                 </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
+              </TableHeader>
+              <TableBody>{renderRows(normalAccounts, "暂无正常证券账户")}</TableBody>
+            </Table>
+          </div>
+        </div>
+
+        <div>
+          <h3 className="mb-2 text-lg font-semibold">冻结账户</h3>
+          <div className="rounded-md border border-slate-200 bg-white">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>证券账户号</TableHead>
+                  <TableHead>账户类型</TableHead>
+                  <TableHead>姓名 / 法人</TableHead>
+                  <TableHead>证件号</TableHead>
+                  <TableHead>关联资金账户</TableHead>
+                  <TableHead>状态</TableHead>
+                  <TableHead>登记日期</TableHead>
+                  <TableHead className="text-right">操作</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>{renderRows(frozenAccounts, "暂无冻结证券账户")}</TableBody>
+            </Table>
+          </div>
+        </div>
       </div>
 
-      {/* 操作对话框（挂失/补办/销户） */}
       <Dialog open={actionModalOpen} onOpenChange={setActionModalOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-xl">
           <DialogHeader>
             <DialogTitle>
-              {actionType === 'loss' ? '证券账户挂失' : actionType === 'reissue' ? '证券账户补办' : '证券账户销户'}
+              {actionType === "loss"
+                ? "证券账户挂失"
+                : actionType === "reissue"
+                ? "证券账户补办"
+                : actionType === "close"
+                ? "证券账户销户"
+                : "修改投资者信息"}
             </DialogTitle>
             <DialogDescription>
-              {actionType === 'loss' 
-                ? `办理挂失将冻结账户 ${selectedAccount?.sec_acc_no} 下所有的证券，不可进行买卖。` 
-                : actionType === 'reissue' 
-                  ? `为账户 ${selectedAccount?.sec_acc_no} 办理补办，将生成新的账户号码。`
-                  : `销户前必须确认该账户中的所有证券已全部卖出清空。此操作不可逆！`}
+              {actionType === "edit"
+                ? "修改前请核对投资者信息。"
+                : "请由工作人员手动输入身份证号进行身份校验。"}
             </DialogDescription>
           </DialogHeader>
-          <div className="py-4 space-y-4">
-            <div className="space-y-2">
-              <Label>{actionType === 'close' ? '销户原因' : '操作原因'}</Label>
-              <Input 
-                value={actionReason} 
-                onChange={(e) => setActionReason(e.target.value)} 
-                placeholder={actionType === 'close' ? '请输入销户原因' : '请输入原因（可选）'} 
-              />
-            </div>
-            {actionError && (
-              <div className="text-sm text-red-600 bg-red-50 p-2 rounded">
-                {actionError}
+
+          {actionType === "edit" ? (
+            <div className="grid grid-cols-2 gap-4 py-4">
+              <div className="space-y-2">
+                <Label>姓名</Label>
+                <Input
+                  data-testid="security-edit-name"
+                  value={editForm.name || ""}
+                  onChange={(e) => setEditForm((prev) => ({ ...prev, name: e.target.value }))}
+                />
               </div>
-            )}
-          </div>
+              <div className="space-y-2">
+                <Label>证件类型</Label>
+                <Input
+                  data-testid="security-edit-id-type"
+                  value={editForm.id_type || ""}
+                  onChange={(e) => setEditForm((prev) => ({ ...prev, id_type: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>证件号码</Label>
+                <Input
+                  data-testid="security-edit-id-number"
+                  value={editForm.id_number || ""}
+                  onChange={(e) => setEditForm((prev) => ({ ...prev, id_number: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>联系电话</Label>
+                <Input
+                  data-testid="security-edit-phone"
+                  value={editForm.phone || ""}
+                  onChange={(e) => setEditForm((prev) => ({ ...prev, phone: e.target.value }))}
+                />
+              </div>
+              <div className="col-span-2 space-y-2">
+                <Label>地址</Label>
+                <Input
+                  data-testid="security-edit-address"
+                  value={editForm.address || ""}
+                  onChange={(e) => setEditForm((prev) => ({ ...prev, address: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>工作单位</Label>
+                <Input
+                  data-testid="security-edit-work-unit"
+                  value={editForm.work_unit || ""}
+                  onChange={(e) => setEditForm((prev) => ({ ...prev, work_unit: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>职业</Label>
+                <Input
+                  data-testid="security-edit-occupation"
+                  value={editForm.occupation || ""}
+                  onChange={(e) => setEditForm((prev) => ({ ...prev, occupation: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>学历</Label>
+                <Input
+                  data-testid="security-edit-education"
+                  value={editForm.education || ""}
+                  onChange={(e) => setEditForm((prev) => ({ ...prev, education: e.target.value }))}
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label>身份证号 / 证件号</Label>
+                <Input
+                  data-testid="security-action-id-number"
+                  value={actionIdNumber}
+                  onChange={(e) => setActionIdNumber(e.target.value)}
+                  placeholder="请由工作人员手动输入证件号"
+                />
+              </div>
+              {(actionType === "loss" || actionType === "close") && (
+                <div className="space-y-2">
+                  <Label>操作原因</Label>
+                  <Input
+                    data-testid="security-action-reason"
+                    value={actionReason}
+                    onChange={(e) => setActionReason(e.target.value)}
+                    placeholder="请输入操作原因"
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
+          {actionError && (
+            <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-600">{actionError}</div>
+          )}
+
           <DialogFooter>
-            <Button variant="outline" onClick={() => setActionModalOpen(false)}>取消</Button>
-            <Button 
-              variant="destructive" 
-              onClick={handleAccountAction}
-              disabled={actionLoading}
-            >
-              {actionLoading ? '处理中...' : actionType === 'loss' ? '确认挂失' : actionType === 'reissue' ? '确认补办' : '确认销户'}
+            <Button variant="outline" onClick={() => setActionModalOpen(false)}>
+              取消
+            </Button>
+            <Button data-testid="security-action-submit" onClick={handleActionSubmit} disabled={actionLoading}>
+              {actionLoading ? "处理中..." : "确认提交"}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -4,16 +4,19 @@ import account.common.AuthHeaders;
 import account.controller.external.ExternalFundController;
 import account.controller.external.ExternalSecurityController;
 import account.controller.external.ExternalTradeController;
+import account.controller.internal.DashboardController;
 import account.controller.internal.FundAccountController;
 import account.controller.internal.SecurityAccountController;
 import account.controller.internal.StaffController;
 import account.dao.DaoRegistry;
+import account.dao.model.DomainEnums;
 import account.exception.GlobalExceptionHandler;
 import account.service.api.ClientAuthTokenService;
 import account.service.api.FundAccountService;
 import account.service.FundAccountServiceImpl;
 import account.service.InMemoryClientAuthTokenService;
 import account.service.InMemoryStaffAuthTokenService;
+import account.service.OperationLogViewMapper;
 import account.service.api.SecurityAccountService;
 import account.service.SecurityAccountServiceImpl;
 import account.service.api.StaffAuthTokenService;
@@ -63,11 +66,13 @@ class ApiIntegrationTest {
         StaffService staffService = new StaffServiceImpl(registry, staffAuthTokenService);
         FundAccountService fundService = new FundAccountServiceImpl(registry, blacklistClient, clientAuthTokenService);
         SecurityAccountService securityService = new SecurityAccountServiceImpl(registry, blacklistClient, clientAuthTokenService);
+        OperationLogViewMapper operationLogViewMapper = new OperationLogViewMapper(registry);
 
-        mockMvc = MockMvcBuilders.standaloneSetup(
+                mockMvc = MockMvcBuilders.standaloneSetup(
                         new StaffController(staffService, staffAuthTokenService, objectMapper),
                         new SecurityAccountController(securityService, staffAuthTokenService, objectMapper),
                         new FundAccountController(fundService, staffAuthTokenService, objectMapper),
+                        new DashboardController(registry, securityService, fundService, staffAuthTokenService, operationLogViewMapper),
                         new ExternalFundController(fundService, objectMapper),
                         new ExternalSecurityController(securityService, objectMapper),
                         new ExternalTradeController(fundService, securityService, objectMapper)
@@ -138,18 +143,7 @@ class ApiIntegrationTest {
         assertEquals("Investor A Updated", updateInvestorJson.get("name").asText());
         assertEquals("ZJU-FSE", updateInvestorJson.get("work_unit").asText());
 
-        MvcResult clientLoginResult = mockMvc.perform(post("/api/external/fund/login")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "fund_acc_no": "%s",
-                                  "trade_password": "trade123"
-                                }
-                                """.formatted(fundAccNo)))
-                .andExpect(status().isOk())
-                .andReturn();
-        JsonNode clientLoginJson = readJson(clientLoginResult);
-        String clientToken = clientLoginJson.get("auth_token").asText();
+        String clientToken = clientLoginAndGetToken(fundAccNo, "trade123");
         assertNotNull(clientToken);
 
         MvcResult fundSnapshotResult = mockMvc.perform(get("/api/external/fund/snapshot")
@@ -297,6 +291,42 @@ class ApiIntegrationTest {
     }
 
     @Test
+    void dashboardStatsExcludeClosedAccounts() throws Exception {
+        String staffToken = staffLoginAndGetToken("staff01", "staff-pass");
+        TestDatabaseSupport.seedInvestorSecurityFund(
+                registry,
+                "SA9401",
+                "FA9401",
+                "330101199001010071",
+                BigDecimal.ZERO,
+                BigDecimal.ZERO
+        );
+        TestDatabaseSupport.seedInvestorSecurityFund(
+                registry,
+                "SA9402",
+                "FA9402",
+                "330101199001010072",
+                BigDecimal.ZERO,
+                BigDecimal.ZERO
+        );
+        registry.transactionManager().execute(connection -> {
+            registry.securityAccountDao().updateStatus(connection, "SA9402", DomainEnums.AccountStatus.CLOSED);
+            registry.fundAccountDao().updateStatus(connection, "FA9402", DomainEnums.AccountStatus.CLOSED);
+            return null;
+        });
+
+        MvcResult statsResult = mockMvc.perform(get("/api/internal/dashboard/stats")
+                        .header(AuthHeaders.STAFF_AUTH_TOKEN, staffToken))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        JsonNode statsJson = readJson(statsResult);
+        assertEquals(0, statsJson.get("code").asInt());
+        assertEquals(1, statsJson.get("data").get("security_account_count").asInt());
+        assertEquals(1, statsJson.get("data").get("fund_account_count").asInt());
+    }
+
+    @Test
     void bindUnbindAndRebindFlowWorksThroughInternalApi() throws Exception {
         String staffToken = staffLoginAndGetToken("staff01", "staff-pass");
         TestDatabaseSupport.seedInvestorSecurityFund(
@@ -376,17 +406,7 @@ class ApiIntegrationTest {
             return null;
         });
 
-        MvcResult loginResult = mockMvc.perform(post("/api/external/fund/login")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "fund_acc_no": "FA9302",
-                                  "trade_password": "trade123"
-                                }
-                                """))
-                .andExpect(status().isOk())
-                .andReturn();
-        String authToken = readJson(loginResult).get("auth_token").asText();
+        String authToken = clientLoginAndGetToken("FA9302", "trade123");
 
         MvcResult passwordChange = mockMvc.perform(put("/api/external/fund/password")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -403,21 +423,11 @@ class ApiIntegrationTest {
                 .andReturn();
         assertEquals(0, readJson(passwordChange).get("code").asInt());
 
-        MvcResult reloginResult = mockMvc.perform(post("/api/external/fund/login")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "fund_acc_no": "FA9302",
-                                  "trade_password": "trade456"
-                                }
-                                """))
-                .andExpect(status().isOk())
-                .andReturn();
-        assertEquals(0, readJson(reloginResult).get("code").asInt());
+        String reloginToken = clientLoginAndGetToken("FA9302", "trade456");
 
         MvcResult singleStockSnapshot = mockMvc.perform(get("/api/external/security/snapshot")
                         .param("sec_acc_no", "SA9302")
-                        .param("auth_token", readJson(reloginResult).get("auth_token").asText())
+                        .param("auth_token", reloginToken)
                         .param("stock_code", "000001"))
                 .andExpect(status().isOk())
                 .andReturn();
@@ -519,16 +529,7 @@ class ApiIntegrationTest {
             return null;
         });
 
-        String authToken = readJson(mockMvc.perform(post("/api/external/fund/login")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "fund_acc_no": "FA9401",
-                                  "trade_password": "trade123"
-                                }
-                                """))
-                .andExpect(status().isOk())
-                .andReturn()).get("auth_token").asText();
+        String authToken = clientLoginAndGetToken("FA9401", "trade123");
 
         mockMvc.perform(post("/api/external/trade/security-holding")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -822,7 +823,60 @@ class ApiIntegrationTest {
                 .andReturn();
         JsonNode loginJson = readJson(loginResult);
         assertEquals(0, loginJson.get("code").asInt());
-        return loginJson.get("auth_token").asText();
+        if (loginJson.hasNonNull("auth_token")) {
+            return loginJson.get("auth_token").asText();
+        }
+        assertTrue(loginJson.get("requires_certificate").asBoolean());
+
+        JsonNode certificateJson = readJson(mockMvc.perform(post("/api/internal/staff/complete-certificate")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "subject_type": "%s",
+                                  "subject_key": "%s",
+                                  "certificate_code": "CERT-123456"
+                                }
+                                """.formatted(
+                                        loginJson.get("certificate_subject_type").asText(),
+                                        loginJson.get("certificate_subject_key").asText())))
+                .andExpect(status().isOk())
+                .andReturn());
+        assertEquals(0, certificateJson.get("code").asInt());
+        return certificateJson.get("auth_token").asText();
+    }
+
+    private String clientLoginAndGetToken(String fundAccNo, String tradePassword) throws Exception {
+        JsonNode loginJson = readJson(mockMvc.perform(post("/api/external/fund/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "fund_acc_no": "%s",
+                                  "trade_password": "%s"
+                                }
+                                """.formatted(fundAccNo, tradePassword)))
+                .andExpect(status().isOk())
+                .andReturn());
+        assertEquals(0, loginJson.get("code").asInt());
+        if (loginJson.hasNonNull("auth_token")) {
+            return loginJson.get("auth_token").asText();
+        }
+        assertTrue(loginJson.get("requires_certificate").asBoolean());
+
+        JsonNode certificateJson = readJson(mockMvc.perform(post("/api/external/fund/complete-certificate")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "subject_type": "%s",
+                                  "subject_key": "%s",
+                                  "certificate_code": "CERT-123456"
+                                }
+                                """.formatted(
+                                        loginJson.get("certificate_subject_type").asText(),
+                                        loginJson.get("certificate_subject_key").asText())))
+                .andExpect(status().isOk())
+                .andReturn());
+        assertEquals(0, certificateJson.get("code").asInt());
+        return certificateJson.get("auth_token").asText();
     }
 
     private JsonNode readJson(MvcResult result) throws Exception {

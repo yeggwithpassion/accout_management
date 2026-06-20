@@ -3,6 +3,7 @@ package account.controller.internal;
 import account.common.AuthHeaders;
 import account.common.Result;
 import account.common.ResultPayloadMapper;
+import account.dto.CompleteLoginCertificateRequest;
 import account.dto.DeactivateStaffRequest;
 import account.dto.StaffLoginRequest;
 import account.service.api.StaffAuthTokenService;
@@ -31,6 +32,12 @@ public class StaffController {
     public Result<Void> staffLogin(@Valid @RequestBody StaffLoginRequest request) {
         log.info("[staffLogin] username={}", request.getUsername());
         return ResultPayloadMapper.flatten(objectMapper, staffService.staffLogin(request), "登录成功");
+    }
+
+    @PostMapping("/complete-certificate")
+    public Result<Void> completeCertificate(@Valid @RequestBody CompleteLoginCertificateRequest request) {
+        log.info("[completeStaffCertificate] subject_key={}", request.getSubjectKey());
+        return ResultPayloadMapper.flatten(objectMapper, staffService.completeLoginCertificate(request), "认证成功");
     }
 
     @PostMapping("/deactivate")

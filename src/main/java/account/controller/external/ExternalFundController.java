@@ -1,11 +1,12 @@
 package account.controller.external;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import account.common.Result;
 import account.common.ResultPayloadMapper;
 import account.dto.ClientChangeFundPasswordRequest;
 import account.dto.ClientLoginAuthRequest;
+import account.dto.CompleteLoginCertificateRequest;
 import account.service.api.FundAccountService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import lombok.RequiredArgsConstructor;
@@ -37,6 +38,12 @@ public class ExternalFundController {
                 fundAccountService.clientLoginAuth(request.getFundAccNo(), request.getTradePassword()),
                 "登录成功"
         );
+    }
+
+    @PostMapping("/complete-certificate")
+    public Result<Void> completeCertificate(@Valid @RequestBody CompleteLoginCertificateRequest request) {
+        log.info("[completeFundCertificate] subject_key={}", request.getSubjectKey());
+        return ResultPayloadMapper.flatten(objectMapper, fundAccountService.completeLoginCertificate(request), "认证成功");
     }
 
     @GetMapping("/snapshot")

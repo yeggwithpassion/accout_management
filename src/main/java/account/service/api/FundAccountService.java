@@ -5,6 +5,7 @@ import account.dto.AccountBindingResponse;
 import account.dto.AccountStatusResponse;
 import account.dto.ClientChangeFundPasswordRequest;
 import account.dto.ClientLoginAuthResponse;
+import account.dto.CompleteLoginCertificateRequest;
 import account.dto.CloseFundAccountRequest;
 import account.dto.CreateFundAccountRequest;
 import account.dto.DepositRequest;
@@ -12,6 +13,7 @@ import account.dto.FundAccountCreatedResponse;
 import account.dto.FundAccountListItemResponse;
 import account.dto.FundBalanceChangeResponse;
 import account.dto.FundInfoResponse;
+import account.dto.FundLogView;
 import account.dto.FundSnapshotResponse;
 import account.dto.FundTradeUpdateResponse;
 import account.dto.FundReissueResponse;
@@ -39,7 +41,11 @@ public interface FundAccountService {
 
     FundInfoResponse queryFundInfo(String fundAccNo, String idNumber, boolean includeLogs, Integer staffId);
 
+    List<FundLogView> queryFundLogs(String fundAccNo, String idNumber, int limit, Integer staffId);
+
     ClientLoginAuthResponse clientLoginAuth(String fundAccNo, String tradePassword);
+
+    ClientLoginAuthResponse completeLoginCertificate(CompleteLoginCertificateRequest request);
 
     FundSnapshotResponse getFundSnapshot(String fundAccNo, String authToken);
 

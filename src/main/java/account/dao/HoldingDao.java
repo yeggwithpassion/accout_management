@@ -126,4 +126,12 @@ public final class HoldingDao extends BaseJdbcDao {
                 now
         );
     }
+
+    public boolean deleteBySecurityAccountNo(Connection connection, String secAccNo) {
+        return executor.update(
+                connection,
+                "delete from holding where sec_acc_no = ?",
+                statement -> statement.setString(1, secAccNo)
+        ) >= 0;
+    }
 }

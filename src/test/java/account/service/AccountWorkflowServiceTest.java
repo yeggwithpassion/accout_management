@@ -118,9 +118,22 @@ class AccountWorkflowServiceTest {
                 "SA9002",
                 "FA9002",
                 "330101199001010012",
-                BigDecimal.ZERO,
-                BigDecimal.ZERO
+                new BigDecimal("300.00"),
+                new BigDecimal("200.00")
         );
+        registry.transactionManager().execute(connection -> {
+            registry.holdingDao().saveOrUpdate(connection, new DomainModels.Holding(
+                    null,
+                    "SA9002",
+                    "600001",
+                    "邯郸钢铁",
+                    0,
+                    80,
+                    new BigDecimal("8.0000"),
+                    java.time.LocalDateTime.now()
+            ));
+            return null;
+        });
 
         String oldToken = clientAuthTokenService.issueToken("FA9002", "SA9002");
         registry.transactionManager().execute(connection -> {
@@ -142,6 +155,50 @@ class AccountWorkflowServiceTest {
         assertTrue(response.getNewFundAccNo() != null && !response.getNewFundAccNo().isBlank());
         assertEquals(DomainEnums.AccountStatus.CLOSED, registry.fundAccountDao().findByAccountNo("FA9002").orElseThrow().status());
         assertEquals(response.getNewFundAccNo(), registry.securityAccountDao().findByAccountNo("SA9002").orElseThrow().linkedFundAcc());
+        assertEquals(BigDecimal.ZERO.setScale(2), registry.fundAccountDao().findByAccountNo("FA9002").orElseThrow().availableBalance().setScale(2));
+        assertEquals(BigDecimal.ZERO.setScale(2), registry.fundAccountDao().findByAccountNo("FA9002").orElseThrow().frozenBalance().setScale(2));
+        assertEquals(new BigDecimal("500.00"), registry.fundAccountDao().findByAccountNo(response.getNewFundAccNo()).orElseThrow().availableBalance());
+        assertEquals(BigDecimal.ZERO.setScale(2), registry.fundAccountDao().findByAccountNo(response.getNewFundAccNo()).orElseThrow().frozenBalance().setScale(2));
+        assertEquals(80, registry.holdingDao().findByAccountAndStock("SA9002", "600001").orElseThrow().quantity());
+        assertEquals(0, registry.holdingDao().findByAccountAndStock("SA9002", "600001").orElseThrow().frozenQuantity());
+    }
+
+    @Test
+    void reissueSecurityAccountMovesHoldingsAndClearsOldAccount() {
+        TestDatabaseSupport.seedInvestorSecurityFund(
+                registry,
+                "SA9010",
+                "FA9010",
+                "330101199001010022",
+                BigDecimal.ZERO,
+                BigDecimal.ZERO
+        );
+        registry.transactionManager().execute(connection -> {
+            registry.holdingDao().saveOrUpdate(connection, new DomainModels.Holding(
+                    null,
+                    "SA9010",
+                    "600519",
+                    "贵州茅台",
+                    0,
+                    60,
+                    new BigDecimal("100.0000"),
+                    java.time.LocalDateTime.now()
+            ));
+            registry.securityAccountDao().updateStatus(connection, "SA9010", DomainEnums.AccountStatus.LOSS_FROZEN);
+            return null;
+        });
+
+        var request = new account.dto.ReissueSecurityAccountRequest();
+        request.setOldSecAccNo("SA9010");
+        request.setIdNumber("330101199001010022");
+        request.setStaffId(1);
+
+        var response = securityService.reissueSecurityAccount(request);
+
+        assertEquals(DomainEnums.AccountStatus.CLOSED, registry.securityAccountDao().findByAccountNo("SA9010").orElseThrow().status());
+        assertTrue(registry.holdingDao().listBySecurityAccountNo("SA9010").isEmpty());
+        assertEquals(60, registry.holdingDao().findByAccountAndStock(response.getNewSecAccNo(), "600519").orElseThrow().quantity());
+        assertEquals(0, registry.holdingDao().findByAccountAndStock(response.getNewSecAccNo(), "600519").orElseThrow().frozenQuantity());
     }
 
     @Test
