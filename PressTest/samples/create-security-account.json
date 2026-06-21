@@ -1,0 +1,12 @@
+{
+  "investor_type": "个人",
+  "name": "PT-User-0001",
+  "gender": "男",
+  "id_type": "身份证",
+  "id_number": "330101199001010001",
+  "phone": "13800000001",
+  "address": "Hangzhou",
+  "work_unit": "ZJU",
+  "occupation": "Engineer",
+  "education": "Bachelor"
+}

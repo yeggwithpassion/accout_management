@@ -1,0 +1,7 @@
+{
+  "sec_acc_no": "${sec_acc_no}",
+  "id_number": "${id_number}",
+  "trade_password": "trade123",
+  "withdraw_password": "withdraw123",
+  "currency": "CNY"
+}
