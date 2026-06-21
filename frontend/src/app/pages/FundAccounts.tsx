@@ -105,6 +105,8 @@ export default function FundAccounts() {
   const [isAccountActionModalOpen, setIsAccountActionModalOpen] = useState(false);
   const [accountActionReason, setAccountActionReason] = useState("");
   const [accountActionIdNumber, setAccountActionIdNumber] = useState("");
+  const [accountActionSecAccNo, setAccountActionSecAccNo] = useState("");
+  const [reissueCurrency, setReissueCurrency] = useState("CNY");
   const [reissueTradePassword, setReissueTradePassword] = useState("");
   const [reissueWithdrawPassword, setReissueWithdrawPassword] = useState("");
   const [accountActionError, setAccountActionError] = useState("");
@@ -268,6 +270,8 @@ export default function FundAccounts() {
     setAccountAction(action);
     setAccountActionReason("");
     setAccountActionIdNumber("");
+    setAccountActionSecAccNo("");
+    setReissueCurrency(account.currency || "CNY");
     setReissueTradePassword("");
     setReissueWithdrawPassword("");
     setAccountActionError("");
@@ -278,7 +282,11 @@ export default function FundAccounts() {
     if (!selectedAccount || !accountAction) return;
 
     if (!accountActionIdNumber.trim()) {
-      setAccountActionError("请由工作人员手动输入身份证号进行校验");
+      setAccountActionError("请由工作人员手动输入身份证或法人注册登记号");
+      return;
+    }
+    if ((accountAction === "loss" || accountAction === "reissue") && !accountActionSecAccNo.trim()) {
+      setAccountActionError("请手动输入并核对证券账户号");
       return;
     }
 
@@ -295,13 +303,16 @@ export default function FundAccounts() {
       if (accountAction === "loss") {
         await api.reportFundLoss(
           selectedAccount.fund_acc_no,
+          accountActionSecAccNo.trim(),
           accountActionReason,
           accountActionIdNumber.trim()
         );
       } else if (accountAction === "reissue") {
         await api.reissueFundAccount(
           selectedAccount.fund_acc_no,
+          accountActionSecAccNo.trim(),
           accountActionIdNumber.trim(),
+          reissueCurrency,
           reissueTradePassword,
           reissueWithdrawPassword
         );
@@ -840,19 +851,29 @@ export default function FundAccounts() {
             </DialogTitle>
             <DialogDescription>
               {accountAction === "reissue"
-                ? "补办后会生成新资金账户，新账户可用余额和冻结余额均从 0 开始。"
-                : "请由工作人员手动输入身份证号进行身份校验。"}
+                ? "按开户手续重新办理。原账户的全部资金将迁移到新账户，资金和证券账户将重新激活。"
+                : "挂失时必须同时核对身份证/法人注册登记号与证券账户号。"}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label>身份证号</Label>
+              <Label>身份证号 / 法人注册登记号</Label>
               <Input
                 value={accountActionIdNumber}
                 onChange={(event) => setAccountActionIdNumber(event.target.value)}
                 placeholder="请输入身份证号"
               />
             </div>
+            {(accountAction === "loss" || accountAction === "reissue") && (
+              <div className="space-y-2">
+                <Label>证券账户号</Label>
+                <Input
+                  value={accountActionSecAccNo}
+                  onChange={(event) => setAccountActionSecAccNo(event.target.value)}
+                  placeholder="请手动输入证券账户号"
+                />
+              </div>
+            )}
             {(accountAction === "loss" || accountAction === "close") && (
               <div className="space-y-2">
                 <Label>操作原因</Label>
@@ -865,6 +886,18 @@ export default function FundAccounts() {
             )}
             {accountAction === "reissue" && (
               <>
+                <div className="space-y-2">
+                  <Label>币种</Label>
+                  <select
+                    value={reissueCurrency}
+                    onChange={(event) => setReissueCurrency(event.target.value)}
+                    className="flex h-10 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm"
+                  >
+                    <option value="CNY">人民币 (CNY)</option>
+                    <option value="USD">美元 (USD)</option>
+                    <option value="HKD">港币 (HKD)</option>
+                  </select>
+                </div>
                 <div className="space-y-2">
                   <Label>新交易密码</Label>
                   <Input

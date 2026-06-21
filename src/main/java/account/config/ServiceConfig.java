@@ -25,7 +25,7 @@ public class ServiceConfig {
     @Value("${account.datasource.password:root}")
     private String dbPassword;
 
-    @Value("${account.blacklist.base-url:http://localhost:8081}")
+    @Value("${account.blacklist.base-url:http://10.196.95.30:8081}")
     private String blacklistBaseUrl;
 
     @Bean

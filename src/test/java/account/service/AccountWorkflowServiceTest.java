@@ -144,7 +144,9 @@ class AccountWorkflowServiceTest {
 
         ReissueFundAccountRequest request = new ReissueFundAccountRequest();
         request.setOldFundAccNo("FA9002");
+        request.setSecAccNo("SA9002");
         request.setIdNumber("330101199001010012");
+        request.setCurrency("CNY");
         request.setNewTradePassword("trade456");
         request.setNewWithdrawPassword("withdraw456");
         request.setStaffId(1);
@@ -190,6 +192,9 @@ class AccountWorkflowServiceTest {
 
         var request = new account.dto.ReissueSecurityAccountRequest();
         request.setOldSecAccNo("SA9010");
+        request.setInvestorType("个人");
+        request.setName("Tester-SA9010");
+        request.setIdType("身份证");
         request.setIdNumber("330101199001010022");
         request.setStaffId(1);
 

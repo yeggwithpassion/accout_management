@@ -16,6 +16,10 @@ public class ReportFundLossRequest {
     @JsonProperty("id_number")
     private String idNumber;
 
+    @NotBlank
+    @JsonProperty("sec_acc_no")
+    private String secAccNo;
+
     @JsonProperty("staff_id")
     private Integer staffId;
 

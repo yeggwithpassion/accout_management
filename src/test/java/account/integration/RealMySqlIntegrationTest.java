@@ -262,6 +262,7 @@ class RealMySqlIntegrationTest {
                         .content("""
                                 {
                                   "fund_acc_no": "FA_MYSQL_010",
+                                  "sec_acc_no": "SA_MYSQL_010",
                                   "id_number": "330101199001010310",
                                   "reason": "card lost"
                                 }
@@ -278,7 +279,9 @@ class RealMySqlIntegrationTest {
                         .content("""
                                 {
                                   "old_fund_acc_no": "FA_MYSQL_010",
+                                  "sec_acc_no": "SA_MYSQL_010",
                                   "id_number": "330101199001010310",
+                                  "currency": "CNY",
                                   "new_trade_password": "trade456",
                                   "new_withdraw_password": "withdraw456"
                                 }
@@ -324,6 +327,9 @@ class RealMySqlIntegrationTest {
                         .content("""
                                 {
                                   "old_sec_acc_no": "SA_MYSQL_010",
+                                  "investor_type": "个人",
+                                  "name": "Tester-SA_MYSQL_010",
+                                  "id_type": "身份证",
                                   "id_number": "330101199001010310"
                                 }
                                 """))

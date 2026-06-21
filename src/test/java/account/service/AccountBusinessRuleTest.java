@@ -359,6 +359,7 @@ class AccountBusinessRuleTest {
 
         ReportFundLossRequest request = new ReportFundLossRequest();
         request.setFundAccNo("FA1002");
+        request.setSecAccNo("SA1002");
         request.setIdNumber("330101199001010011");
         request.setStaffId(1);
 

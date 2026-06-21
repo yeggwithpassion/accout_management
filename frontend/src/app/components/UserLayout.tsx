@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router";
-import { Bell, Briefcase, Key, LayoutDashboard, LogOut, Menu, Settings, Wallet } from "lucide-react";
+import { Bell, Briefcase, Key, LayoutDashboard, LogOut, Menu, Settings } from "lucide-react";
 import { api } from "../lib/api";
 
 export function UserLayout() {
@@ -28,7 +28,6 @@ export function UserLayout() {
 
   const navigation = [
     { name: "我的账户", href: "/user", icon: LayoutDashboard, end: true },
-    { name: "银证转账", href: "/user/transfer", icon: Wallet },
     { name: "修改密码", href: "/user/password", icon: Key },
   ];
 

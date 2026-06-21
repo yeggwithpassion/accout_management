@@ -235,6 +235,7 @@ public class FundAccountServiceImpl implements FundAccountService {
                     .orElseThrow(() -> new BusinessException(ErrorCode.ERR_010, "资金账户不存在: " + request.getFundAccNo()));
 
             verifyOwnership(account.secAccNo(), request.getIdNumber());
+            verifySecurityAccountNumber(account.secAccNo(), request.getSecAccNo());
 
             if (account.status() == DomainEnums.AccountStatus.LOSS_FROZEN) {
                 throw new BusinessException(ErrorCode.ERR_021, "资金账户已处于挂失冻结状态");
@@ -272,6 +273,14 @@ public class FundAccountServiceImpl implements FundAccountService {
                     .orElseThrow(() -> new BusinessException(ErrorCode.ERR_010, "资金账户不存在: " + request.getOldFundAccNo()));
 
             verifyOwnership(oldAccount.secAccNo(), request.getIdNumber());
+            verifySecurityAccountNumber(oldAccount.secAccNo(), request.getSecAccNo());
+
+            if (!oldAccount.currency().equalsIgnoreCase(request.getCurrency())) {
+                throw new BusinessException(ErrorCode.PARAM_INVALID, "补办币种必须与原资金账户一致");
+            }
+            if (isBlacklistedBySecurityAccountNo(request.getSecAccNo())) {
+                throw new BusinessException(ErrorCode.ERR_012, "投资者在黑名单中，无法补办资金账户");
+            }
 
             if (oldAccount.status() != DomainEnums.AccountStatus.LOSS_FROZEN) {
                 throw new BusinessException(ErrorCode.ERR_021, "资金账户当前状态不允许补办");
@@ -767,8 +776,17 @@ public class FundAccountServiceImpl implements FundAccountService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.ERR_005, "关联证券账户不存在: " + secAccNo));
         var investor = dao.investorDao().findById(secAccount.investorId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.ERR_013, "投资者不存在"));
-        if (!investor.idNumber().equals(idNumber)) {
-            throw new BusinessException(ErrorCode.ERR_013, "身份证号与证券账户持有人不一致");
+        String expectedCredential = investor.type() == DomainEnums.InvestorType.LEGAL_ENTITY
+                ? investor.legalNumber()
+                : investor.idNumber();
+        if (expectedCredential == null || !expectedCredential.equals(idNumber)) {
+            throw new BusinessException(ErrorCode.ERR_013, "身份证或法人注册登记号与证券账户持有人不一致");
+        }
+    }
+
+    private void verifySecurityAccountNumber(String actualSecAccNo, String suppliedSecAccNo) {
+        if (actualSecAccNo == null || !actualSecAccNo.equals(suppliedSecAccNo)) {
+            throw new BusinessException(ErrorCode.ERR_013, "证券账户号与资金账户的绑定关系不一致");
         }
     }
 

@@ -38,6 +38,7 @@ export default function SecuritiesAccounts() {
   const [attendanceType, setAttendanceType] = useState<AttendanceType>("self");
   const [isSubmittingCreate, setIsSubmittingCreate] = useState(false);
   const [createError, setCreateError] = useState("");
+  const [reissueOldSecAccNo, setReissueOldSecAccNo] = useState<string | null>(null);
 
   const [selectedAccount, setSelectedAccount] = useState<SecurityAccount | null>(null);
   const [actionType, setActionType] = useState<ActionType | null>(null);
@@ -95,6 +96,7 @@ export default function SecuritiesAccounts() {
   );
 
   const resetCreateForm = () => {
+    setReissueOldSecAccNo(null);
     setInvestorType("个人");
     setAttendanceType("self");
     setCreateError("");
@@ -174,8 +176,14 @@ export default function SecuritiesAccounts() {
     setIsSubmittingCreate(true);
     setCreateError("");
     try {
-      const result = await api.createSecuritiesAccount(payload);
-      alert(`开户成功，证券账户号：${result.sec_acc_no || "已生成"}`);
+      const result = reissueOldSecAccNo
+        ? await api.reissueSecurityAccount(reissueOldSecAccNo, payload)
+        : await api.createSecuritiesAccount(payload);
+      alert(
+        reissueOldSecAccNo
+          ? `补办成功，新证券账户号：${result.new_sec_acc_no || "已生成"}`
+          : `开户成功，证券账户号：${result.sec_acc_no || "已生成"}`
+      );
       setIsAccountModalOpen(false);
       resetCreateForm();
       await fetchAccounts();
@@ -187,6 +195,14 @@ export default function SecuritiesAccounts() {
   };
 
   const openActionModal = (account: SecurityAccount, type: ActionType) => {
+    if (type === "reissue") {
+      setReissueOldSecAccNo(account.sec_acc_no);
+      setInvestorType(account.investor_type === "法人" ? "法人" : "个人");
+      setAttendanceType("self");
+      setCreateError("");
+      setIsAccountModalOpen(true);
+      return;
+    }
     setSelectedAccount(account);
     setActionType(type);
     setActionIdNumber("");
@@ -222,8 +238,6 @@ export default function SecuritiesAccounts() {
     try {
       if (actionType === "loss") {
         await api.reportSecurityLoss(selectedAccount.sec_acc_no, actionReason, actionIdNumber.trim());
-      } else if (actionType === "reissue") {
-        await api.reissueSecurityAccount(selectedAccount.sec_acc_no, actionIdNumber.trim());
       } else if (actionType === "close") {
         await api.closeSecurityAccount(selectedAccount.sec_acc_no, actionReason, actionIdNumber.trim());
       } else if (actionType === "edit") {
@@ -357,8 +371,12 @@ export default function SecuritiesAccounts() {
           </DialogTrigger>
           <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>开设证券账户</DialogTitle>
-              <DialogDescription>填写完整开户信息，由后端统一完成资格校验与开户处理。</DialogDescription>
+              <DialogTitle>{reissueOldSecAccNo ? "补办证券账户" : "开设证券账户"}</DialogTitle>
+              <DialogDescription>
+                {reissueOldSecAccNo
+                  ? `按正常开户手续重新填写全部资料，原账户：${reissueOldSecAccNo}`
+                  : "填写完整开户信息，由后端统一完成资格校验与开户处理。"}
+              </DialogDescription>
             </DialogHeader>
             <Tabs
               value={investorType}
@@ -541,7 +559,7 @@ export default function SecuritiesAccounts() {
                 取消
               </Button>
             <Button data-testid="security-create-submit" onClick={handleCreateAccount} disabled={isSubmittingCreate}>
-                {isSubmittingCreate ? "提交中..." : "确认开户"}
+                {isSubmittingCreate ? "提交中..." : reissueOldSecAccNo ? "确认补办" : "确认开户"}
               </Button>
             </DialogFooter>
           </DialogContent>

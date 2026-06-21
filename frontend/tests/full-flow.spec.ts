@@ -298,7 +298,8 @@ test.describe("Full flow regression", () => {
       await page.getByTestId(`fund-loss-${personalFund!.fund_acc_no}`).click();
       const dialog = page.locator('[role="dialog"]').last();
       await dialog.locator('input').nth(0).fill(personalId);
-      await dialog.locator('input').nth(1).fill("lost");
+      await dialog.locator('input').nth(1).fill(personalSecurity!.sec_acc_no);
+      await dialog.locator('input').nth(2).fill("lost");
       await page.getByTestId("fund-account-action-submit").click();
       await expect(dialog).toBeHidden();
     }
@@ -327,8 +328,9 @@ test.describe("Full flow regression", () => {
       await page.getByTestId(`fund-reissue-${personalFund!.fund_acc_no}`).click();
       const dialog = page.locator('[role="dialog"]').last();
       await dialog.locator('input').nth(0).fill(personalId);
-      await dialog.locator('input').nth(1).fill("111111");
-      await dialog.locator('input').nth(2).fill("222222");
+      await dialog.locator('input').nth(1).fill(personalSecurity!.sec_acc_no);
+      await dialog.locator('input').nth(2).fill("111111");
+      await dialog.locator('input').nth(3).fill("222222");
       await page.getByTestId("fund-account-action-submit").click();
       await expect(dialog).toBeHidden();
     }

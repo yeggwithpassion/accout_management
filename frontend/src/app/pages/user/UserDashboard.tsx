@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArrowRightLeft, Wallet } from "lucide-react";
+import { Wallet } from "lucide-react";
 import { useNavigate } from "react-router";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
@@ -88,15 +88,11 @@ export default function UserDashboard() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
-      <div className="flex items-center justify-between gap-4">
+      <div>
         <div>
           <h2 className="text-2xl font-bold tracking-tight text-slate-900">我的账户</h2>
           <p className="text-slate-500">查看资金账户与证券持仓信息</p>
         </div>
-        <Button onClick={() => navigate("/user/transfer")}>
-          <ArrowRightLeft className="mr-2 h-4 w-4" />
-          银证转账
-        </Button>
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">

@@ -17,6 +17,14 @@ public class ReissueFundAccountRequest {
     private String idNumber;
 
     @NotBlank
+    @JsonProperty("sec_acc_no")
+    private String secAccNo;
+
+    @NotBlank
+    @JsonProperty("currency")
+    private String currency;
+
+    @NotBlank
     @JsonProperty("new_trade_password")
     private String newTradePassword;
 

@@ -162,11 +162,16 @@ public class SecurityAccountServiceImpl implements SecurityAccountService {
 
     @Override
     public SecurityReissueResponse reissueSecurityAccount(ReissueSecurityAccountRequest request) {
+        validateInvestorEligibility(request);
+        if (isBlacklistedByUserName(request.getName())) {
+            throw new BusinessException(ErrorCode.ERR_012, "投资者在黑名单中，无法补办证券账户");
+        }
+
         return dao.transactionManager().execute(connection -> {
             var oldAccount = dao.securityAccountDao().findByAccountNoForUpdate(connection, request.getOldSecAccNo())
                     .orElseThrow(() -> new BusinessException(ErrorCode.ERR_005, "证券账户不存在: " + request.getOldSecAccNo()));
 
-            verifyInvestorOwnership(oldAccount.investorId(), request.getIdNumber());
+            verifyReissueInvestorDetails(oldAccount.investorId(), request);
 
             if (oldAccount.status() != DomainEnums.AccountStatus.LOSS_FROZEN) {
                 throw new BusinessException(ErrorCode.ERR_021, "证券账户当前状态不允许补办");
@@ -592,6 +597,23 @@ public class SecurityAccountServiceImpl implements SecurityAccountService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.ERR_013, "投资者不存在"));
         if (!investor.idNumber().equals(idNumber)) {
             throw new BusinessException(ErrorCode.ERR_013, "身份证号与账户持有人不一致");
+        }
+    }
+
+    private void verifyReissueInvestorDetails(int investorId, ReissueSecurityAccountRequest request) {
+        var investor = dao.investorDao().findById(investorId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.ERR_013, "投资者不存在"));
+        DomainEnums.InvestorType requestedType = EnumMapper.toDaoInvestorType(request.getInvestorType());
+        if (investor.type() != requestedType
+                || !investor.name().equals(request.getName())
+                || !investor.idType().equals(request.getIdType())
+                || !investor.idNumber().equals(request.getIdNumber())) {
+            throw new BusinessException(ErrorCode.ERR_013, "补办开户资料与原证券账户持有人不一致");
+        }
+        if (requestedType == DomainEnums.InvestorType.LEGAL_ENTITY
+                && (!java.util.Objects.equals(investor.legalNumber(), request.getLegalNumber())
+                || !java.util.Objects.equals(investor.businessLicense(), request.getBusinessLicense()))) {
+            throw new BusinessException(ErrorCode.ERR_013, "法人注册登记号或营业执照号与原账户不一致");
         }
     }
 

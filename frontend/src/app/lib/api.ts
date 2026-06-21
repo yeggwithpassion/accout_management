@@ -461,12 +461,17 @@ class ApiClient {
     );
   }
 
-  async reportFundLoss(fundAccNo: string, reason: string, idNumber: string) {
+  async reportFundLoss(fundAccNo: string, secAccNo: string, reason: string, idNumber: string) {
     return this.request<any>(
       "/internal/fund/accounts/loss",
       {
         method: "POST",
-        body: JSON.stringify({ fund_acc_no: fundAccNo, reason, id_number: idNumber }),
+        body: JSON.stringify({
+          fund_acc_no: fundAccNo,
+          sec_acc_no: secAccNo,
+          reason,
+          id_number: idNumber,
+        }),
       },
       true
     );
@@ -474,7 +479,9 @@ class ApiClient {
 
   async reissueFundAccount(
     oldFundAccNo: string,
+    secAccNo: string,
     idNumber: string,
+    currency: string,
     newTradePassword: string,
     newWithdrawPassword: string
   ) {
@@ -484,7 +491,9 @@ class ApiClient {
         method: "POST",
         body: JSON.stringify({
           old_fund_acc_no: oldFundAccNo,
+          sec_acc_no: secAccNo,
           id_number: idNumber,
+          currency,
           new_trade_password: newTradePassword,
           new_withdraw_password: newWithdrawPassword,
         }),
@@ -553,12 +562,12 @@ class ApiClient {
     );
   }
 
-  async reissueSecurityAccount(oldSecAccNo: string, idNumber: string) {
+  async reissueSecurityAccount(oldSecAccNo: string, openingData: Record<string, unknown>) {
     return this.request<any>(
       "/internal/security/accounts/reissue",
       {
         method: "POST",
-        body: JSON.stringify({ old_sec_acc_no: oldSecAccNo, id_number: idNumber }),
+        body: JSON.stringify({ old_sec_acc_no: oldSecAccNo, ...openingData }),
       },
       true
     );

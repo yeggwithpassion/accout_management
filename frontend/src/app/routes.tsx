@@ -8,7 +8,6 @@ import CertificateAuth from "./pages/CertificateAuth";
 import Login from "./pages/Login";
 import SecuritiesAccounts from "./pages/SecuritiesAccounts";
 import ChangePassword from "./pages/user/ChangePassword";
-import Transfer from "./pages/user/Transfer";
 import UserDashboard from "./pages/user/UserDashboard";
 
 function ErrorBoundary() {
@@ -60,7 +59,6 @@ export const router = createBrowserRouter([
         Component: UserLayout,
         children: [
           { index: true, Component: UserDashboard },
-          { path: "transfer", Component: Transfer },
           { path: "password", Component: ChangePassword },
         ],
       },

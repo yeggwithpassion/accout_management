@@ -286,6 +286,7 @@ class ApiIntegrationTest {
                         .content("""
                                 {
                                   "fund_acc_no": "FA9201",
+                                  "sec_acc_no": "SA9201",
                                   "id_number": "330101199001010041",
                                   "reason": "lost card"
                                 }

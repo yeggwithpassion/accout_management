@@ -17,6 +17,8 @@ account:
     url: jdbc:mysql://localhost:3306/account_db?useSSL=false&serverTimezone=Asia/Shanghai&characterEncoding=utf-8&allowPublicKeyRetrieval=true
     username: ${ACCOUNT_DB_USERNAME:}
     password: ${ACCOUNT_DB_PASSWORD:}
+  blacklist:
+    base-url: ${ACCOUNT_BLACKLIST_BASE_URL:http://10.196.95.30:8081}
 
 logging:
   level:
