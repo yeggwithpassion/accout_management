@@ -46,17 +46,17 @@ public class UpdateInvestorInfoRequest {
     @JsonProperty("business_license")
     private String businessLicense;
 
-    @JsonProperty("authorize_name")
-    private String authorizeName;
-
-    @JsonProperty("authorize_phone")
-    private String authorizePhone;
-
-    @JsonProperty("authorize_address")
-    private String authorizeAddress;
-
     @JsonProperty("executor_name")
     private String executorName;
+
+    @JsonProperty("executor_id_number")
+    private String executorIdNumber;
+
+    @JsonProperty("executor_phone")
+    private String executorPhone;
+
+    @JsonProperty("executor_address")
+    private String executorAddress;
 
     @JsonProperty("agent_name")
     private String agentName;

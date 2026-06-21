@@ -89,10 +89,10 @@ public class SecurityAccountServiceImpl implements SecurityAccountService {
                         request.getEducation(),
                         request.getLegalNumber(),
                         request.getBusinessLicense(),
-                        request.getAuthorizeName(),
-                        request.getAuthorizePhone(),
-                        request.getAuthorizeAddress(),
                         request.getExecutorName(),
+                        request.getExecutorIdNumber(),
+                        request.getExecutorPhone(),
+                        request.getExecutorAddress(),
                         request.getAgentName(),
                         request.getAgentIdNumber(),
                         LocalDateTime.now()
@@ -298,10 +298,10 @@ public class SecurityAccountServiceImpl implements SecurityAccountService {
                     mergeOptionalValue(request.getEducation(), currentInvestor.education()),
                     mergeOptionalValue(request.getLegalNumber(), currentInvestor.legalNumber()),
                     mergeOptionalValue(request.getBusinessLicense(), currentInvestor.businessLicense()),
-                    mergeOptionalValue(request.getAuthorizeName(), currentInvestor.authorizeName()),
-                    mergeOptionalValue(request.getAuthorizePhone(), currentInvestor.authorizePhone()),
-                    mergeOptionalValue(request.getAuthorizeAddress(), currentInvestor.authorizeAddress()),
                     mergeOptionalValue(request.getExecutorName(), currentInvestor.executorName()),
+                    mergeOptionalValue(request.getExecutorIdNumber(), currentInvestor.executorIdNumber()),
+                    mergeOptionalValue(request.getExecutorPhone(), currentInvestor.executorPhone()),
+                    mergeOptionalValue(request.getExecutorAddress(), currentInvestor.executorAddress()),
                     mergeOptionalValue(request.getAgentName(), currentInvestor.agentName()),
                     mergeOptionalValue(request.getAgentIdNumber(), currentInvestor.agentIdNumber()),
                     currentInvestor.createdAt()
@@ -331,10 +331,10 @@ public class SecurityAccountServiceImpl implements SecurityAccountService {
                     .education(updatedInvestor.education())
                     .legalNumber(updatedInvestor.legalNumber())
                     .businessLicense(updatedInvestor.businessLicense())
-                    .authorizeName(updatedInvestor.authorizeName())
-                    .authorizePhone(updatedInvestor.authorizePhone())
-                    .authorizeAddress(updatedInvestor.authorizeAddress())
                     .executorName(updatedInvestor.executorName())
+                    .executorIdNumber(updatedInvestor.executorIdNumber())
+                    .executorPhone(updatedInvestor.executorPhone())
+                    .executorAddress(updatedInvestor.executorAddress())
                     .agentName(updatedInvestor.agentName())
                     .agentIdNumber(updatedInvestor.agentIdNumber())
                     .build();
@@ -546,10 +546,10 @@ public class SecurityAccountServiceImpl implements SecurityAccountService {
         if ("法人".equals(request.getInvestorType())) {
             requireField(request.getLegalNumber(), "legal_number");
             requireField(request.getBusinessLicense(), "business_license");
-            requireField(request.getAuthorizeName(), "authorize_name");
-            requireField(request.getAuthorizePhone(), "authorize_phone");
-            requireField(request.getAuthorizeAddress(), "authorize_address");
             requireField(request.getExecutorName(), "executor_name");
+            requireField(request.getExecutorIdNumber(), "executor_id_number");
+            requireField(request.getExecutorPhone(), "executor_phone");
+            requireField(request.getExecutorAddress(), "executor_address");
             return;
         }
 

@@ -27,10 +27,10 @@ CREATE TABLE investor (
     education VARCHAR(50) NULL,
     legal_number VARCHAR(20) NULL,
     business_license VARCHAR(20) NULL,
-    authorize_name VARCHAR(20) NULL,
-    authorize_phone VARCHAR(20) NULL,
-    authorize_address VARCHAR(100) NULL,
     executor_name VARCHAR(50) NULL,
+    executor_id_number VARCHAR(50) NULL,
+    executor_phone VARCHAR(20) NULL,
+    executor_address VARCHAR(100) NULL,
     agent_name VARCHAR(100) NULL,
     agent_id_number VARCHAR(50) NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP

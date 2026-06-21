@@ -134,12 +134,10 @@ export default function SecuritiesAccounts() {
         ...basePayload,
         legal_number: String(formData.get("legal_number") || "").trim(),
         business_license: String(formData.get("business_license") || "").trim(),
-        authorize_name: String(formData.get("authorize_name") || "").trim(),
-        authorize_phone: String(formData.get("authorize_phone") || "").trim(),
-        authorize_address: String(formData.get("authorize_address") || "").trim(),
         executor_name: String(formData.get("executor_name") || "").trim(),
-        agent_name: String(formData.get("agent_name") || "").trim(),
-        agent_id_number: String(formData.get("agent_id_number") || "").trim(),
+        executor_id_number: String(formData.get("executor_id_number") || "").trim(),
+        executor_phone: String(formData.get("executor_phone") || "").trim(),
+        executor_address: String(formData.get("executor_address") || "").trim(),
       };
     } else {
       payload = {
@@ -161,10 +159,10 @@ export default function SecuritiesAccounts() {
       const requiredCorpFields = [
         "legal_number",
         "business_license",
-        "authorize_name",
-        "authorize_phone",
-        "authorize_address",
         "executor_name",
+        "executor_id_number",
+        "executor_phone",
+        "executor_address",
       ] as const;
       const missingField = requiredCorpFields.find((field) => !payload[field]);
       if (missingField) {
@@ -467,15 +465,23 @@ export default function SecuritiesAccounts() {
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="corp-id-type">证件类型</Label>
-                      <Input id="corp-id-type" name="id_type" defaultValue="营业执照" />
+                      <Input id="corp-id-type" name="id_type" defaultValue="法定代表人身份证" />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="corp-id-number">营业执照号码</Label>
-                      <Input id="corp-id-number" name="id_number" placeholder="请输入营业执照号码" />
+                      <Label htmlFor="corp-id-number">法定代表人身份证号码</Label>
+                      <Input
+                        id="corp-id-number"
+                        name="id_number"
+                        placeholder="请输入法定代表人身份证号码"
+                      />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="corp-legal-number">法人注册登记号</Label>
-                      <Input id="corp-legal-number" name="legal_number" placeholder="请输入法人注册登记号" />
+                      <Label htmlFor="corp-legal-number">有效的法人注册登记号码</Label>
+                      <Input
+                        id="corp-legal-number"
+                        name="legal_number"
+                        placeholder="请输入法人注册登记号码"
+                      />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="corp-business-license">营业执照号码</Label>
@@ -494,35 +500,31 @@ export default function SecuritiesAccounts() {
                       <Input id="corp-address" name="address" placeholder="请输入联系地址" />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="corp-authorize-name">授权人姓名</Label>
-                      <Input id="corp-authorize-name" name="authorize_name" placeholder="请输入授权人姓名" />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="corp-authorize-phone">授权人联系电话</Label>
-                      <Input id="corp-authorize-phone" name="authorize_phone" placeholder="请输入授权人联系电话" />
-                    </div>
-                    <div className="col-span-2 space-y-2">
-                      <Label htmlFor="corp-authorize-address">授权人地址</Label>
+                      <Label htmlFor="corp-executor-id-number">授权执行人有效身份证号码</Label>
                       <Input
-                        id="corp-authorize-address"
-                        name="authorize_address"
-                        placeholder="请输入授权人地址"
+                        id="corp-executor-id-number"
+                        name="executor_id_number"
+                        placeholder="请输入授权执行人有效身份证号码"
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="corp-executor-name">法人授权执行人姓名</Label>
-                      <Input id="corp-executor-name" name="executor_name" placeholder="请输入执行人姓名" />
+                      <Label htmlFor="corp-executor-phone">授权执行人联系电话</Label>
+                      <Input id="corp-executor-phone" name="executor_phone" placeholder="请输入授权执行人联系电话" />
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="corp-agent-name">代理人姓名</Label>
-                      <Input id="corp-agent-name" name="agent_name" placeholder="请输入代理人姓名" />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="corp-agent-id-number">代理人证件号</Label>
+                    <div className="col-span-2 space-y-2">
+                      <Label htmlFor="corp-executor-address">授权执行人地址</Label>
                       <Input
-                        id="corp-agent-id-number"
-                        name="agent_id_number"
-                        placeholder="请输入代理人证件号"
+                        id="corp-executor-address"
+                        name="executor_address"
+                        placeholder="请输入授权执行人地址"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="corp-executor-name">法定代表人授权证券交易执行人的姓名</Label>
+                      <Input
+                        id="corp-executor-name"
+                        name="executor_name"
+                        placeholder="请输入授权证券交易执行人姓名"
                       />
                     </div>
                   </div>

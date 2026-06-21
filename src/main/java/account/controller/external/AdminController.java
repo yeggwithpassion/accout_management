@@ -1,10 +1,13 @@
 package account.controller.external;
 
 import account.common.AuthHeaders;
+import account.common.BusinessException;
+import account.common.ErrorCode;
 import account.common.Result;
 import account.common.ResultPayloadMapper;
 import account.dto.AdminCloseSecurityAccountRequest;
 import account.dto.AdminFreezeRequest;
+import account.dto.AdminInvestorFreezeRequest;
 import account.dto.SettleAnnualInterestRequest;
 import account.service.api.AdminService;
 import account.service.api.StaffAuthTokenService;
@@ -29,6 +32,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class AdminController {
 
+    private static final String TRADE_ADMIN_USERNAME = "tradeadmin";
+
     private final AdminService adminService;
     private final StaffAuthTokenService staffAuthTokenService;
     private final ObjectMapper objectMapper;
@@ -37,7 +42,8 @@ public class AdminController {
     public Result<Void> settleAnnualInterest(
             @RequestHeader(AuthHeaders.STAFF_AUTH_TOKEN) String authToken,
             @Valid @RequestBody SettleAnnualInterestRequest request) {
-        request.setOperatorId(String.valueOf(requireStaffId(authToken)));
+        var session = requireTradeAdmin(authToken);
+        request.setOperatorId(String.valueOf(session.staffId()));
         log.info("[settleAnnualInterest] operator_id={} year_rate={}", request.getOperatorId(), request.getYearRate());
         return ResultPayloadMapper.flatten(objectMapper, adminService.settleAnnualInterest(request), "结息完成");
     }
@@ -46,7 +52,8 @@ public class AdminController {
     public Result<Void> adminFreezeAccount(
             @RequestHeader(AuthHeaders.STAFF_AUTH_TOKEN) String authToken,
             @Valid @RequestBody AdminFreezeRequest request) {
-        request.setAdminId(String.valueOf(requireStaffId(authToken)));
+        var session = requireTradeAdmin(authToken);
+        request.setAdminId(String.valueOf(session.staffId()));
         log.info("[adminFreezeAccount] account_type={} account_no={} freeze_type={} admin_id={} reason={}",
                 request.getAccountType(), request.getAccountNo(),
                 request.getFreezeType(), request.getAdminId(), request.getReason());
@@ -58,7 +65,8 @@ public class AdminController {
     public Result<Void> adminUnfreezeAccount(
             @RequestHeader(AuthHeaders.STAFF_AUTH_TOKEN) String authToken,
             @Valid @RequestBody AdminFreezeRequest request) {
-        request.setAdminId(String.valueOf(requireStaffId(authToken)));
+        var session = requireTradeAdmin(authToken);
+        request.setAdminId(String.valueOf(session.staffId()));
         log.info("[adminUnfreezeAccount] account_type={} account_no={} freeze_type={} admin_id={}",
                 request.getAccountType(), request.getAccountNo(),
                 request.getFreezeType(), request.getAdminId());
@@ -66,11 +74,36 @@ public class AdminController {
         return Result.success("操作成功");
     }
 
+    @PostMapping("/investors/freeze")
+    public Result<Void> adminFreezeInvestor(
+            @RequestHeader(AuthHeaders.STAFF_AUTH_TOKEN) String authToken,
+            @Valid @RequestBody AdminInvestorFreezeRequest request) {
+        var session = requireTradeAdmin(authToken);
+        request.setAdminId(String.valueOf(session.staffId()));
+        log.info("[adminFreezeInvestor] id_number={} admin_id={} reason={}",
+                request.getIdNumber(), request.getAdminId(), request.getReason());
+        adminService.adminFreezeInvestorByIdNumber(request);
+        return Result.success("操作成功");
+    }
+
+    @PostMapping("/investors/unfreeze")
+    public Result<Void> adminUnfreezeInvestor(
+            @RequestHeader(AuthHeaders.STAFF_AUTH_TOKEN) String authToken,
+            @Valid @RequestBody AdminInvestorFreezeRequest request) {
+        var session = requireTradeAdmin(authToken);
+        request.setAdminId(String.valueOf(session.staffId()));
+        log.info("[adminUnfreezeInvestor] id_number={} admin_id={}",
+                request.getIdNumber(), request.getAdminId());
+        adminService.adminUnfreezeInvestorByIdNumber(request);
+        return Result.success("操作成功");
+    }
+
     @GetMapping("/accounts/{account_no}")
     public Result<Void> adminGetAccountDetails(
             @RequestHeader(AuthHeaders.STAFF_AUTH_TOKEN) String authToken,
             @PathVariable("account_no") @NotBlank String accountNo) {
-        String adminId = String.valueOf(requireStaffId(authToken));
+        var session = requireTradeAdmin(authToken);
+        String adminId = String.valueOf(session.staffId());
         log.info("[adminGetAccountDetails] account_no={} admin_id={}", accountNo, adminId);
         return ResultPayloadMapper.flatten(objectMapper, adminService.adminGetAccountDetails(accountNo, adminId), "查询成功");
     }
@@ -79,14 +112,19 @@ public class AdminController {
     public Result<Void> adminCloseSecurityAccount(
             @RequestHeader(AuthHeaders.STAFF_AUTH_TOKEN) String authToken,
             @Valid @RequestBody AdminCloseSecurityAccountRequest request) {
-        request.setAdminId(String.valueOf(requireStaffId(authToken)));
+        var session = requireTradeAdmin(authToken);
+        request.setAdminId(String.valueOf(session.staffId()));
         log.info("[adminCloseSecurityAccount] security_account_no={} admin_id={} force_reason={}",
                 request.getSecurityAccountNo(), request.getAdminId(), request.getForceReason());
         adminService.adminCloseSecurityAccount(request);
         return Result.success("强制销户成功");
     }
 
-    private Integer requireStaffId(String authToken) {
-        return staffAuthTokenService.requireAccess(authToken).staffId();
+    private StaffAuthTokenService.AuthSession requireTradeAdmin(String authToken) {
+        var session = staffAuthTokenService.requireAccess(authToken);
+        if (!TRADE_ADMIN_USERNAME.equalsIgnoreCase(session.username())) {
+            throw new BusinessException(ErrorCode.ERR_018, "仅 tradeadmin 可调用管理接口");
+        }
+        return session;
     }
 }

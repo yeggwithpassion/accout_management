@@ -16,12 +16,12 @@ SET FOREIGN_KEY_CHECKS = 1;
 INSERT INTO investor (
     investor_id, type, name, id_type, id_number, phone, address,
     occupation, education, legal_number, business_license,
-    authorize_name, authorize_phone, authorize_address,
-    executor_name, agent_name, agent_id_number
+    executor_name, executor_id_number, executor_phone, executor_address,
+    agent_name, agent_id_number
 ) VALUES
     (1, '个人', '张三', '身份证', '330101199001010011', '13800000001', '浙江省杭州市西湖区文三路1号', '工程师', '本科', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
     (2, '个人', '李四', '身份证', '330102199202020022', '13800000002', '浙江省杭州市拱墅区莫干山路2号', '教师', '硕士', NULL, NULL, NULL, NULL, NULL, NULL, '王五', '330102198812120033'),
-    (3, '法人', '杭州星河科技有限公司', '营业执照', '91330100MA0000001A', '0571-88000000', '浙江省杭州市滨江区江南大道88号', NULL, NULL, 'REG-2026-001', 'LIC-2026-001', '330103198503030044', '13900000003', '浙江省杭州市滨江区科技园1幢', '赵六', NULL, NULL);
+    (3, '法人', '杭州星河科技有限公司', '身份证', '330103198503030044', '0571-88000000', '浙江省杭州市滨江区江南大道88号', NULL, NULL, 'REG-2026-001', 'LIC-2026-001', '赵六', '330105199002145678', '13900000003', '浙江省杭州市滨江区科技园1幢', NULL, NULL);
 
 INSERT INTO staff (
     staff_id, username, password_hash, status

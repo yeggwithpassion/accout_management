@@ -4,6 +4,8 @@ import account.common.AuthHeaders;
 import account.controller.external.ExternalFundController;
 import account.controller.external.ExternalSecurityController;
 import account.controller.external.ExternalTradeController;
+import account.controller.external.AdminController;
+import account.controller.external.AuditController;
 import account.controller.internal.DashboardController;
 import account.controller.internal.FundAccountController;
 import account.controller.internal.SecurityAccountController;
@@ -11,12 +13,14 @@ import account.controller.internal.StaffController;
 import account.dao.DaoRegistry;
 import account.dao.model.DomainEnums;
 import account.exception.GlobalExceptionHandler;
+import account.service.AdminServiceImpl;
 import account.service.api.ClientAuthTokenService;
 import account.service.api.FundAccountService;
 import account.service.FundAccountServiceImpl;
 import account.service.InMemoryClientAuthTokenService;
 import account.service.InMemoryStaffAuthTokenService;
 import account.service.OperationLogViewMapper;
+import account.service.AuditServiceImpl;
 import account.service.api.SecurityAccountService;
 import account.service.SecurityAccountServiceImpl;
 import account.service.api.StaffAuthTokenService;
@@ -57,6 +61,7 @@ class ApiIntegrationTest {
         registry = DaoRegistry.forDriverManager(jdbcUrl, "sa", "");
         TestDatabaseSupport.insertStaff(jdbcUrl, 1, "staff01", "staff-pass", "\u6b63\u5e38");
         TestDatabaseSupport.insertStaff(jdbcUrl, 2, "staff02", "staff-pass", "\u6b63\u5e38");
+        TestDatabaseSupport.insertStaff(jdbcUrl, 99, "tradeadmin", "123456", "\u6b63\u5e38");
 
         objectMapper = new ObjectMapper().findAndRegisterModules();
         StaffAuthTokenService staffAuthTokenService = new InMemoryStaffAuthTokenService(28800L);
@@ -67,12 +72,16 @@ class ApiIntegrationTest {
         FundAccountService fundService = new FundAccountServiceImpl(registry, blacklistClient, clientAuthTokenService);
         SecurityAccountService securityService = new SecurityAccountServiceImpl(registry, blacklistClient, clientAuthTokenService);
         OperationLogViewMapper operationLogViewMapper = new OperationLogViewMapper(registry);
+        AdminServiceImpl adminService = new AdminServiceImpl(registry);
+        AuditServiceImpl auditService = new AuditServiceImpl(registry, operationLogViewMapper);
 
                 mockMvc = MockMvcBuilders.standaloneSetup(
                         new StaffController(staffService, staffAuthTokenService, objectMapper),
                         new SecurityAccountController(securityService, staffAuthTokenService, objectMapper),
                         new FundAccountController(fundService, staffAuthTokenService, objectMapper),
                         new DashboardController(registry, securityService, fundService, staffAuthTokenService, operationLogViewMapper),
+                        new AdminController(adminService, staffAuthTokenService, objectMapper),
+                        new AuditController(auditService, staffAuthTokenService, objectMapper),
                         new ExternalFundController(fundService, objectMapper),
                         new ExternalSecurityController(securityService, objectMapper),
                         new ExternalTradeController(fundService, securityService, objectMapper)
@@ -288,6 +297,96 @@ class ApiIntegrationTest {
 
         assertEquals("\u6302\u5931\u51bb\u7ed3", registry.fundAccountDao().findByAccountNo("FA9201").orElseThrow().status().dbValue());
         assertEquals("\u6302\u5931\u51bb\u7ed3", registry.securityAccountDao().findByAccountNo("SA9201").orElseThrow().status().dbValue());
+    }
+
+    @Test
+    void tradeAdminCanFreezeAndUnfreezeInvestorByIdNumberThroughAdminApi() throws Exception {
+        TestDatabaseSupport.seedInvestorSecurityFund(
+                registry,
+                "SA9601",
+                "FA9601",
+                "330101199001010111",
+                new BigDecimal("1200.00"),
+                new BigDecimal("50.00")
+        );
+        registry.transactionManager().execute(connection -> {
+            registry.holdingDao().saveOrUpdate(connection, new account.dao.model.DomainModels.Holding(
+                    null,
+                    "SA9601",
+                    "600519",
+                    "\u8d35\u5dde\u8305\u53f0",
+                    100,
+                    20,
+                    new BigDecimal("1500.0000"),
+                    java.time.LocalDateTime.now()
+            ));
+            return null;
+        });
+
+        String tradeAdminToken = staffLoginAndGetToken("tradeadmin", "123456");
+
+        JsonNode freezeJson = readJson(mockMvc.perform(post("/api/admin/investors/freeze")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header(AuthHeaders.STAFF_AUTH_TOKEN, tradeAdminToken)
+                        .content("""
+                                {
+                                  "id_number": "330101199001010111",
+                                  "reason": "blacklist hit"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn());
+        assertEquals(0, freezeJson.get("code").asInt());
+        assertEquals(DomainEnums.AccountStatus.VIOLATION_FROZEN,
+                registry.fundAccountDao().findByAccountNo("FA9601").orElseThrow().status());
+        assertEquals(DomainEnums.AccountStatus.VIOLATION_FROZEN,
+                registry.securityAccountDao().findByAccountNo("SA9601").orElseThrow().status());
+        assertEquals(0, registry.holdingDao().findByAccountAndStock("SA9601", "600519").orElseThrow().quantity());
+        assertEquals(120, registry.holdingDao().findByAccountAndStock("SA9601", "600519").orElseThrow().frozenQuantity());
+
+        JsonNode unfreezeJson = readJson(mockMvc.perform(post("/api/admin/investors/unfreeze")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header(AuthHeaders.STAFF_AUTH_TOKEN, tradeAdminToken)
+                        .content("""
+                                {
+                                  "id_number": "330101199001010111"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn());
+        assertEquals(0, unfreezeJson.get("code").asInt());
+        assertEquals(DomainEnums.AccountStatus.NORMAL,
+                registry.fundAccountDao().findByAccountNo("FA9601").orElseThrow().status());
+        assertEquals(DomainEnums.AccountStatus.NORMAL,
+                registry.securityAccountDao().findByAccountNo("SA9601").orElseThrow().status());
+        assertEquals(120, registry.holdingDao().findByAccountAndStock("SA9601", "600519").orElseThrow().quantity());
+        assertEquals(0, registry.holdingDao().findByAccountAndStock("SA9601", "600519").orElseThrow().frozenQuantity());
+    }
+
+    @Test
+    void nonTradeAdminCannotCallAdminInvestorFreezeApi() throws Exception {
+        TestDatabaseSupport.seedInvestorSecurityFund(
+                registry,
+                "SA9602",
+                "FA9602",
+                "330101199001010112",
+                BigDecimal.ZERO,
+                BigDecimal.ZERO
+        );
+        String staffToken = staffLoginAndGetToken("staff01", "staff-pass");
+
+        JsonNode rejectedJson = readJson(mockMvc.perform(post("/api/admin/investors/freeze")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header(AuthHeaders.STAFF_AUTH_TOKEN, staffToken)
+                        .content("""
+                                {
+                                  "id_number": "330101199001010112",
+                                  "reason": "blacklist hit"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn());
+        assertEquals(1018, rejectedJson.get("code").asInt());
     }
 
     @Test

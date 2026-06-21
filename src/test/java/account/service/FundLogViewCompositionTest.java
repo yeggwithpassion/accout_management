@@ -53,10 +53,10 @@ class FundLogViewCompositionTest {
                         education varchar(50),
                         legal_number varchar(20),
                         business_license varchar(20),
-                        authorize_name varchar(20),
-                        authorize_phone varchar(20),
-                        authorize_address varchar(100),
                         executor_name varchar(50),
+                        executor_id_number varchar(50),
+                        executor_phone varchar(20),
+                        executor_address varchar(100),
                         agent_name varchar(100),
                         agent_id_number varchar(50),
                         created_at timestamp default current_timestamp not null

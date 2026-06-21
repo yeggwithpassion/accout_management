@@ -8,6 +8,7 @@ import account.dao.model.DomainModels;
 import account.dto.AdminAccountDetailsResponse;
 import account.dto.AdminCloseSecurityAccountRequest;
 import account.dto.AdminFreezeRequest;
+import account.dto.AdminInvestorFreezeRequest;
 import account.dto.AnnualInterestSettlementResponse;
 import account.dto.SettleAnnualInterestRequest;
 import account.service.api.AdminService;
@@ -19,7 +20,11 @@ import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 @Slf4j
 @Service
@@ -368,14 +373,150 @@ public class AdminServiceImpl implements AdminService {
         });
     }
 
+    @Override
+    public void adminFreezeInvestorByIdNumber(AdminInvestorFreezeRequest request) {
+        var admin = verifyOperator(request.getAdminId());
+        var investor = dao.investorDao().findByIdNumber(request.getIdNumber())
+                .orElseThrow(() -> new BusinessException(ErrorCode.ERR_010, "投资者不存在: " + request.getIdNumber()));
+
+        dao.transactionManager().execute(connection -> {
+            Map<String, DomainModels.SecurityAccount> securityAccounts = new LinkedHashMap<>();
+            for (var account : dao.securityAccountDao().listByInvestorId(investor.investorId())) {
+                var locked = dao.securityAccountDao().findByAccountNoForUpdate(connection, account.secAccNo()).orElse(null);
+                if (locked == null || locked.status() == DomainEnums.AccountStatus.CLOSED) {
+                    continue;
+                }
+                securityAccounts.put(locked.secAccNo(), locked);
+            }
+
+            Map<String, DomainModels.FundAccount> fundAccounts = new LinkedHashMap<>();
+            for (var securityAccount : securityAccounts.values()) {
+                var linkedFund = dao.fundAccountDao().findBySecurityAccountNo(securityAccount.secAccNo()).orElse(null);
+                if (linkedFund == null) {
+                    continue;
+                }
+                var lockedFund = dao.fundAccountDao().findByAccountNoForUpdate(connection, linkedFund.fundAccNo()).orElse(null);
+                if (lockedFund == null || lockedFund.status() == DomainEnums.AccountStatus.CLOSED) {
+                    continue;
+                }
+                fundAccounts.put(lockedFund.fundAccNo(), lockedFund);
+            }
+
+            int affectedCount = 0;
+            for (var fundAccount : fundAccounts.values()) {
+                if (fundAccount.status() == DomainEnums.AccountStatus.VIOLATION_FROZEN) {
+                    continue;
+                }
+                if (fundAccount.status() == DomainEnums.AccountStatus.LOSS_FROZEN
+                        || fundAccount.status() == DomainEnums.AccountStatus.PRE_CLOSE) {
+                    continue;
+                }
+                freezeFundAccountSelf(connection, fundAccount, DomainEnums.AccountStatus.VIOLATION_FROZEN);
+                affectedCount++;
+            }
+
+            for (var securityAccount : securityAccounts.values()) {
+                if (securityAccount.status() == DomainEnums.AccountStatus.VIOLATION_FROZEN) {
+                    continue;
+                }
+                if (securityAccount.status() == DomainEnums.AccountStatus.LOSS_FROZEN
+                        || securityAccount.status() == DomainEnums.AccountStatus.PRE_CLOSE) {
+                    continue;
+                }
+                freezeSecurityAccountSelf(connection, securityAccount, DomainEnums.AccountStatus.VIOLATION_FROZEN);
+                affectedCount++;
+            }
+
+            if (affectedCount == 0) {
+                throw new BusinessException(ErrorCode.ERR_021, "该投资者名下没有可冻结的账户");
+            }
+
+            dao.operationLogDao().create(connection, new DomainModels.OperationLog(
+                    null,
+                    admin.staffId(),
+                    "按身份证冻结账户",
+                    "INVESTOR",
+                    request.getIdNumber(),
+                    "管理端按身份证执行违规冻结，原因: " + Optional.ofNullable(request.getReason()).orElse(""),
+                    LocalDateTime.now()
+            ));
+            return null;
+        });
+    }
+
+    @Override
+    public void adminUnfreezeInvestorByIdNumber(AdminInvestorFreezeRequest request) {
+        var admin = verifyOperator(request.getAdminId());
+        var investor = dao.investorDao().findByIdNumber(request.getIdNumber())
+                .orElseThrow(() -> new BusinessException(ErrorCode.ERR_010, "投资者不存在: " + request.getIdNumber()));
+
+        dao.transactionManager().execute(connection -> {
+            Map<String, DomainModels.SecurityAccount> securityAccounts = new LinkedHashMap<>();
+            for (var account : dao.securityAccountDao().listByInvestorId(investor.investorId())) {
+                var locked = dao.securityAccountDao().findByAccountNoForUpdate(connection, account.secAccNo()).orElse(null);
+                if (locked == null || locked.status() == DomainEnums.AccountStatus.CLOSED) {
+                    continue;
+                }
+                securityAccounts.put(locked.secAccNo(), locked);
+            }
+
+            Map<String, DomainModels.FundAccount> fundAccounts = new LinkedHashMap<>();
+            for (var securityAccount : securityAccounts.values()) {
+                var linkedFund = dao.fundAccountDao().findBySecurityAccountNo(securityAccount.secAccNo()).orElse(null);
+                if (linkedFund == null) {
+                    continue;
+                }
+                var lockedFund = dao.fundAccountDao().findByAccountNoForUpdate(connection, linkedFund.fundAccNo()).orElse(null);
+                if (lockedFund == null || lockedFund.status() == DomainEnums.AccountStatus.CLOSED) {
+                    continue;
+                }
+                fundAccounts.put(lockedFund.fundAccNo(), lockedFund);
+            }
+
+            int affectedCount = 0;
+            for (var fundAccount : fundAccounts.values()) {
+                if (fundAccount.status() != DomainEnums.AccountStatus.VIOLATION_FROZEN) {
+                    continue;
+                }
+                unfreezeFundAccountSelf(connection, fundAccount);
+                affectedCount++;
+            }
+
+            for (var securityAccount : securityAccounts.values()) {
+                if (securityAccount.status() != DomainEnums.AccountStatus.VIOLATION_FROZEN) {
+                    continue;
+                }
+                DomainEnums.AccountStatus restoredStatus =
+                        securityAccount.linkedFundAcc() == null || securityAccount.linkedFundAcc().isBlank()
+                                ? DomainEnums.AccountStatus.NO_FUND_FROZEN
+                                : DomainEnums.AccountStatus.NORMAL;
+                unfreezeSecurityAccountSelf(connection, securityAccount, restoredStatus);
+                affectedCount++;
+            }
+
+            if (affectedCount == 0) {
+                throw new BusinessException(ErrorCode.ERR_021, "该投资者名下没有处于违规冻结状态的账户");
+            }
+
+            dao.operationLogDao().create(connection, new DomainModels.OperationLog(
+                    null,
+                    admin.staffId(),
+                    "按身份证解冻账户",
+                    "INVESTOR",
+                    request.getIdNumber(),
+                    "管理端按身份证解除违规冻结",
+                    LocalDateTime.now()
+            ));
+            return null;
+        });
+    }
+
     private void freezeFundAccountAssets(
             java.sql.Connection connection,
             DomainModels.FundAccount fundAccount,
             DomainEnums.AccountStatus newStatus
     ) {
-        BigDecimal totalBalance = fundAccount.availableBalance().add(fundAccount.frozenBalance());
-        dao.fundAccountDao().updateBalances(connection, fundAccount.fundAccNo(), BigDecimal.ZERO, totalBalance);
-        dao.fundAccountDao().updateStatus(connection, fundAccount.fundAccNo(), newStatus);
+        freezeFundAccountSelf(connection, fundAccount, newStatus);
 
         if (fundAccount.secAccNo() == null || fundAccount.secAccNo().isBlank()) {
             return;
@@ -390,9 +531,7 @@ public class AdminServiceImpl implements AdminService {
             java.sql.Connection connection,
             DomainModels.FundAccount fundAccount
     ) {
-        BigDecimal totalBalance = fundAccount.availableBalance().add(fundAccount.frozenBalance());
-        dao.fundAccountDao().updateBalances(connection, fundAccount.fundAccNo(), totalBalance, BigDecimal.ZERO);
-        dao.fundAccountDao().updateStatus(connection, fundAccount.fundAccNo(), DomainEnums.AccountStatus.NORMAL);
+        unfreezeFundAccountSelf(connection, fundAccount);
 
         if (fundAccount.secAccNo() == null || fundAccount.secAccNo().isBlank()) {
             return;
@@ -410,16 +549,51 @@ public class AdminServiceImpl implements AdminService {
             DomainModels.SecurityAccount securityAccount,
             DomainEnums.AccountStatus newStatus
     ) {
-        freezeAllSecurityHoldings(connection, securityAccount.secAccNo());
-        dao.securityAccountDao().updateStatus(connection, securityAccount.secAccNo(), newStatus);
+        freezeSecurityAccountSelf(connection, securityAccount, newStatus);
     }
 
     private void unfreezeSecurityAccountAssets(
             java.sql.Connection connection,
             DomainModels.SecurityAccount securityAccount
     ) {
+        unfreezeSecurityAccountSelf(connection, securityAccount, DomainEnums.AccountStatus.NORMAL);
+    }
+
+    private void freezeFundAccountSelf(
+            java.sql.Connection connection,
+            DomainModels.FundAccount fundAccount,
+            DomainEnums.AccountStatus newStatus
+    ) {
+        BigDecimal totalBalance = fundAccount.availableBalance().add(fundAccount.frozenBalance());
+        dao.fundAccountDao().updateBalances(connection, fundAccount.fundAccNo(), BigDecimal.ZERO, totalBalance);
+        dao.fundAccountDao().updateStatus(connection, fundAccount.fundAccNo(), newStatus);
+    }
+
+    private void unfreezeFundAccountSelf(
+            java.sql.Connection connection,
+            DomainModels.FundAccount fundAccount
+    ) {
+        BigDecimal totalBalance = fundAccount.availableBalance().add(fundAccount.frozenBalance());
+        dao.fundAccountDao().updateBalances(connection, fundAccount.fundAccNo(), totalBalance, BigDecimal.ZERO);
+        dao.fundAccountDao().updateStatus(connection, fundAccount.fundAccNo(), DomainEnums.AccountStatus.NORMAL);
+    }
+
+    private void freezeSecurityAccountSelf(
+            java.sql.Connection connection,
+            DomainModels.SecurityAccount securityAccount,
+            DomainEnums.AccountStatus newStatus
+    ) {
+        freezeAllSecurityHoldings(connection, securityAccount.secAccNo());
+        dao.securityAccountDao().updateStatus(connection, securityAccount.secAccNo(), newStatus);
+    }
+
+    private void unfreezeSecurityAccountSelf(
+            java.sql.Connection connection,
+            DomainModels.SecurityAccount securityAccount,
+            DomainEnums.AccountStatus restoredStatus
+    ) {
         unfreezeAllSecurityHoldings(connection, securityAccount.secAccNo());
-        dao.securityAccountDao().updateStatus(connection, securityAccount.secAccNo(), DomainEnums.AccountStatus.NORMAL);
+        dao.securityAccountDao().updateStatus(connection, securityAccount.secAccNo(), restoredStatus);
     }
 
     private void freezeAllSecurityHoldings(java.sql.Connection connection, String secAccNo) {

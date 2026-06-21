@@ -14,8 +14,8 @@ public final class InvestorDao extends BaseJdbcDao {
 
     private static final String SELECT_COLUMNS = """
             select investor_id, type, name, gender, id_type, id_number, phone, address, work_unit, occupation, education,
-                   legal_number, business_license, authorize_name, authorize_phone, authorize_address,
-                   executor_name, agent_name, agent_id_number, created_at
+                   legal_number, business_license, executor_name, executor_id_number, executor_phone, executor_address,
+                   agent_name, agent_id_number, created_at
               from investor
             """;
 
@@ -33,10 +33,10 @@ public final class InvestorDao extends BaseJdbcDao {
             resultSet.getString("education"),
             resultSet.getString("legal_number"),
             resultSet.getString("business_license"),
-            resultSet.getString("authorize_name"),
-            resultSet.getString("authorize_phone"),
-            resultSet.getString("authorize_address"),
             resultSet.getString("executor_name"),
+            resultSet.getString("executor_id_number"),
+            resultSet.getString("executor_phone"),
+            resultSet.getString("executor_address"),
             resultSet.getString("agent_name"),
             resultSet.getString("agent_id_number"),
             getLocalDateTime(resultSet, "created_at")
@@ -74,8 +74,8 @@ public final class InvestorDao extends BaseJdbcDao {
         String sql = """
                 insert into investor (
                     type, name, gender, id_type, id_number, phone, address, work_unit, occupation, education,
-                    legal_number, business_license, authorize_name, authorize_phone, authorize_address,
-                    executor_name, agent_name, agent_id_number, created_at
+                    legal_number, business_license, executor_name, executor_id_number, executor_phone, executor_address,
+                    agent_name, agent_id_number, created_at
                 ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """;
         return Math.toIntExact(executor.insertAndReturnKey(connection, sql, statement -> {
@@ -91,10 +91,10 @@ public final class InvestorDao extends BaseJdbcDao {
             statement.setString(10, investor.education());
             statement.setString(11, investor.legalNumber());
             statement.setString(12, investor.businessLicense());
-            statement.setString(13, investor.authorizeName());
-            statement.setString(14, investor.authorizePhone());
-            statement.setString(15, investor.authorizeAddress());
-            statement.setString(16, investor.executorName());
+            statement.setString(13, investor.executorName());
+            statement.setString(14, investor.executorIdNumber());
+            statement.setString(15, investor.executorPhone());
+            statement.setString(16, investor.executorAddress());
             statement.setString(17, investor.agentName());
             statement.setString(18, investor.agentIdNumber());
             statement.setTimestamp(19, toSqlTimestamp(defaultTimestamp(investor.createdAt())));
@@ -116,10 +116,10 @@ public final class InvestorDao extends BaseJdbcDao {
                        education = ?,
                        legal_number = ?,
                        business_license = ?,
-                       authorize_name = ?,
-                       authorize_phone = ?,
-                       authorize_address = ?,
                        executor_name = ?,
+                       executor_id_number = ?,
+                       executor_phone = ?,
+                       executor_address = ?,
                        agent_name = ?,
                        agent_id_number = ?
                  where investor_id = ?
@@ -137,10 +137,10 @@ public final class InvestorDao extends BaseJdbcDao {
             statement.setString(10, investor.education());
             statement.setString(11, investor.legalNumber());
             statement.setString(12, investor.businessLicense());
-            statement.setString(13, investor.authorizeName());
-            statement.setString(14, investor.authorizePhone());
-            statement.setString(15, investor.authorizeAddress());
-            statement.setString(16, investor.executorName());
+            statement.setString(13, investor.executorName());
+            statement.setString(14, investor.executorIdNumber());
+            statement.setString(15, investor.executorPhone());
+            statement.setString(16, investor.executorAddress());
             statement.setString(17, investor.agentName());
             statement.setString(18, investor.agentIdNumber());
             statement.setObject(19, investor.investorId(), Types.INTEGER);

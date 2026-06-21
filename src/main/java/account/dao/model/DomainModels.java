@@ -26,10 +26,10 @@ public final class DomainModels {
             String education,
             String legalNumber,
             String businessLicense,
-            String authorizeName,
-            String authorizePhone,
-            String authorizeAddress,
             String executorName,
+            String executorIdNumber,
+            String executorPhone,
+            String executorAddress,
             String agentName,
             String agentIdNumber,
             LocalDateTime createdAt

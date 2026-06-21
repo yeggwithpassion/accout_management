@@ -15,6 +15,7 @@ import account.dto.CreateFundAccountRequest;
 import account.dto.CreateSecurityAccountRequest;
 import account.dto.DeactivateStaffRequest;
 import account.dto.AdminFreezeRequest;
+import account.dto.AdminInvestorFreezeRequest;
 import account.dto.ReportFundLossRequest;
 import account.dto.UpdateInvestorInfoRequest;
 import account.enums.AccountType;
@@ -72,10 +73,10 @@ class AccountBusinessRuleTest {
                         education varchar(50),
                         legal_number varchar(20),
                         business_license varchar(20),
-                        authorize_name varchar(20),
-                        authorize_phone varchar(20),
-                        authorize_address varchar(100),
                         executor_name varchar(50),
+                        executor_id_number varchar(50),
+                        executor_phone varchar(20),
+                        executor_address varchar(100),
                         agent_name varchar(100),
                         agent_id_number varchar(50),
                         created_at timestamp default current_timestamp not null
@@ -263,15 +264,15 @@ class AccountBusinessRuleTest {
         request.setInvestorType("法人");
         request.setName("法人甲");
         request.setIdType("营业执照");
-        request.setIdNumber("CORP-20260620-01");
+        request.setIdNumber("330104198506154221");
         request.setPhone("13800000000");
         request.setAddress("杭州市西湖区测试路 1 号");
         request.setLegalNumber("LEGAL-001");
         request.setBusinessLicense("BL-001");
-        request.setAuthorizeName("授权人甲");
-        request.setAuthorizePhone("13900000000");
-        request.setAuthorizeAddress("杭州市滨江区测试路 2 号");
         request.setExecutorName("执行人甲");
+        request.setExecutorIdNumber("330105199002145678");
+        request.setExecutorPhone("13900000000");
+        request.setExecutorAddress("杭州市滨江区测试路 2 号");
         request.setStaffId(1);
 
         var response = securityService.createSecurityAccount(request);
@@ -280,7 +281,8 @@ class AccountBusinessRuleTest {
         var investor = registry.investorDao().findById(response.getInvestorId()).orElseThrow();
         assertEquals(InvestorType.LEGAL_ENTITY, investor.type());
         assertEquals("BL-001", investor.businessLicense());
-        assertEquals("授权人甲", investor.authorizeName());
+        assertEquals("执行人甲", investor.executorName());
+        assertEquals("330105199002145678", investor.executorIdNumber());
     }
 
     @Test
@@ -513,6 +515,81 @@ class AccountBusinessRuleTest {
 
         assertEquals(AccountStatus.NORMAL, security.status());
         assertEquals(60, holding.quantity());
+        assertEquals(0, holding.frozenQuantity());
+    }
+
+    @Test
+    void adminFreezeInvestorByIdNumberFreezesSecurityFundAndHoldings() {
+        seedBoundAccounts("SA3010", "FA3010");
+        registry.transactionManager().execute(connection -> {
+            registry.fundAccountDao().updateBalances(connection, "FA3010", new BigDecimal("880.00"), new BigDecimal("20.00"));
+            registry.holdingDao().saveOrUpdate(connection, new Holding(
+                    null,
+                    "SA3010",
+                    "600000",
+                    "浦发银行",
+                    120,
+                    30,
+                    new BigDecimal("9.5000"),
+                    LocalDateTime.now()
+            ));
+            return null;
+        });
+
+        AdminInvestorFreezeRequest request = new AdminInvestorFreezeRequest();
+        request.setAdminId("1");
+        request.setIdNumber("330101199001010011");
+        request.setReason("blacklist hit");
+
+        adminService.adminFreezeInvestorByIdNumber(request);
+
+        var fund = registry.fundAccountDao().findByAccountNo("FA3010").orElseThrow();
+        var security = registry.securityAccountDao().findByAccountNo("SA3010").orElseThrow();
+        var holding = registry.holdingDao().findByAccountAndStock("SA3010", "600000").orElseThrow();
+
+        assertEquals(AccountStatus.VIOLATION_FROZEN, fund.status());
+        assertEquals(AccountStatus.VIOLATION_FROZEN, security.status());
+        assertEquals(BigDecimal.ZERO.setScale(2), fund.availableBalance().setScale(2));
+        assertEquals(new BigDecimal("900.00"), fund.frozenBalance());
+        assertEquals(0, holding.quantity());
+        assertEquals(150, holding.frozenQuantity());
+    }
+
+    @Test
+    void adminUnfreezeInvestorByIdNumberRestoresSecurityFundAndHoldings() {
+        seedBoundAccounts("SA3011", "FA3011");
+        registry.transactionManager().execute(connection -> {
+            registry.fundAccountDao().updateBalances(connection, "FA3011", BigDecimal.ZERO, new BigDecimal("760.00"));
+            registry.fundAccountDao().updateStatus(connection, "FA3011", AccountStatus.VIOLATION_FROZEN);
+            registry.securityAccountDao().updateStatus(connection, "SA3011", AccountStatus.VIOLATION_FROZEN);
+            registry.holdingDao().saveOrUpdate(connection, new Holding(
+                    null,
+                    "SA3011",
+                    "000001",
+                    "平安银行",
+                    0,
+                    88,
+                    new BigDecimal("12.0000"),
+                    LocalDateTime.now()
+            ));
+            return null;
+        });
+
+        AdminInvestorFreezeRequest request = new AdminInvestorFreezeRequest();
+        request.setAdminId("1");
+        request.setIdNumber("330101199001010011");
+
+        adminService.adminUnfreezeInvestorByIdNumber(request);
+
+        var fund = registry.fundAccountDao().findByAccountNo("FA3011").orElseThrow();
+        var security = registry.securityAccountDao().findByAccountNo("SA3011").orElseThrow();
+        var holding = registry.holdingDao().findByAccountAndStock("SA3011", "000001").orElseThrow();
+
+        assertEquals(AccountStatus.NORMAL, fund.status());
+        assertEquals(AccountStatus.NORMAL, security.status());
+        assertEquals(new BigDecimal("760.00"), fund.availableBalance());
+        assertEquals(BigDecimal.ZERO.setScale(2), fund.frozenBalance().setScale(2));
+        assertEquals(88, holding.quantity());
         assertEquals(0, holding.frozenQuantity());
     }
 

@@ -1,6 +1,8 @@
 package account.controller.external;
 
 import account.common.AuthHeaders;
+import account.common.BusinessException;
+import account.common.ErrorCode;
 import account.common.Result;
 import account.common.ResultPayloadMapper;
 import account.service.api.AuditService;
@@ -24,6 +26,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class AuditController {
 
+    private static final String TRADE_ADMIN_USERNAME = "tradeadmin";
+
     private final AuditService auditService;
     private final StaffAuthTokenService staffAuthTokenService;
     private final ObjectMapper objectMapper;
@@ -39,7 +43,8 @@ public class AuditController {
             @RequestParam(value = "operation_type", required = false) String operationType,
             @RequestParam(value = "target_type", required = false) String targetType,
             @RequestParam(value = "target_id", required = false) String targetId) {
-        Integer operatorStaffId = staffAuthTokenService.requireAccess(authToken).staffId();
+        var session = requireTradeAdmin(authToken);
+        Integer operatorStaffId = session.staffId();
         log.info("[queryOperationLog] operator_staff_id={} query_staff_id={} from={} to={} operation_type={}",
                 operatorStaffId, staffId, timeFrom, timeTo, operationType);
         return ResultPayloadMapper.flatten(
@@ -47,5 +52,13 @@ public class AuditController {
                 auditService.queryOperationLog(operatorStaffId, staffId, timeFrom, timeTo, operationType, targetType, targetId),
                 "查询成功"
         );
+    }
+
+    private StaffAuthTokenService.AuthSession requireTradeAdmin(String authToken) {
+        var session = staffAuthTokenService.requireAccess(authToken);
+        if (!TRADE_ADMIN_USERNAME.equalsIgnoreCase(session.username())) {
+            throw new BusinessException(ErrorCode.ERR_018, "仅 tradeadmin 可调用审计接口");
+        }
+        return session;
     }
 }
