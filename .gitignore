@@ -1,6 +1,10 @@
 # PDF documents in root
 需求分析报告_账户业务处理.pdf
 系统设计报告_账户交易子系统.pdf
+测试报告模板(1).pdf
+
+# Agent-local instructions
+AGENT.md
 
 # Maven
 target/

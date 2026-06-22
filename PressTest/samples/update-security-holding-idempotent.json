@@ -1,0 +1,9 @@
+{
+  "sec_acc_no": "PTSA-HOLD-001",
+  "stock_code": "600519",
+  "stock_name": "贵州茅台",
+  "ref_order_id": "PT-REF-HOLD-001",
+  "change_type": "买入增加",
+  "quantity": 10,
+  "price": 12.34
+}

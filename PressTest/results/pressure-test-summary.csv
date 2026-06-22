@@ -1,0 +1,5 @@
+scenario,operations,concurrency,success_count,failure_count,wall_time_ms,avg_latency_ms,p95_latency_ms,p99_latency_ms,throughput_ops_per_sec,verification_passed
+并发开户链路,30,10,30,0,219,71.97,131,131,136.99,true
+重复资金回调幂等,120,24,120,0,198,36.85,80,88,606.06,true
+重复持仓回调幂等,120,24,120,0,220,41.22,71,81,545.45,true
+混合并发查询,400,40,385,15,10702,1020.33,3495,4409,37.38,false

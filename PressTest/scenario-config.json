@@ -1,0 +1,80 @@
+{
+  "reference": "Pressure-test structure aligned with the root PDF template.",
+  "environment": {
+    "runtime": "Java 17",
+    "test_stack": [
+      "JUnit 5",
+      "Spring MockMvc",
+      "H2 in-memory database (MODE=MySQL) or real MySQL, depending on DbMode",
+      "Maven Surefire",
+      "PowerShell runner"
+    ]
+  },
+  "scenarios": [
+    {
+      "name": "concurrent-account-opening",
+      "description": "Concurrent security-account and fund-account opening chain.",
+      "endpoints": [
+        "/api/internal/security/accounts",
+        "/api/internal/fund/accounts"
+      ],
+      "concurrency": 10,
+      "operations": 30,
+      "sample_type": "30 unique adult personal investors with distinct ID numbers",
+      "success_criteria": [
+        "All opening chains return success",
+        "Each generated investor ID can be mapped to a non-closed security account",
+        "No task returns an exception or business error"
+      ]
+    },
+    {
+      "name": "duplicate-fund-callback",
+      "description": "Repeated fund-balance callback idempotency validation.",
+      "endpoints": [
+        "/api/external/trade/fund-balance"
+      ],
+      "concurrency": 24,
+      "operations": 120,
+      "sample_type": "120 repeated callbacks with the same ref_order_id",
+      "success_criteria": [
+        "Exactly one callback returns duplicate=false",
+        "Remaining callbacks return duplicate=true",
+        "Only one effective fund transaction log is persisted for the ref_order_id"
+      ]
+    },
+    {
+      "name": "duplicate-holding-callback",
+      "description": "Repeated holding callback idempotency validation.",
+      "endpoints": [
+        "/api/external/trade/security-holding"
+      ],
+      "concurrency": 24,
+      "operations": 120,
+      "sample_type": "120 repeated callbacks with the same ref_order_id and stock_code",
+      "success_criteria": [
+        "Exactly one callback returns duplicate=false",
+        "Remaining callbacks return duplicate=true",
+        "Only one effective holding-change log is persisted for the ref_order_id"
+      ]
+    },
+    {
+      "name": "concurrent-query-mix",
+      "description": "Mixed concurrent reads across dashboard, list, and log endpoints.",
+      "endpoints": [
+        "/api/internal/dashboard/stats",
+        "/api/internal/dashboard/recent-logs",
+        "/api/internal/security/accounts",
+        "/api/internal/fund/accounts/list",
+        "/api/internal/fund/logs"
+      ],
+      "concurrency": 40,
+      "operations": 400,
+      "sample_type": "400 read requests distributed across 5 internal query endpoints",
+      "success_criteria": [
+        "High request success rate under the configured concurrency",
+        "No system-level DAO or connection-establishment failures",
+        "Verification queries can complete after scenario execution"
+      ]
+    }
+  ]
+}
